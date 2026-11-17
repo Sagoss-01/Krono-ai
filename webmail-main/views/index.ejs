@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Netiify Webmail</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.18);
+    }
+    * { font-family: 'Sora', sans-serif; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.4); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.7); }
+
+    /* ── Login Screen ── */
+    #login-screen {
+      background: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(139,92,246,0.08) 0%, transparent 50%),
+                  #0f172a;
+    }
+    .login-card {
+      background: rgba(15,23,42,0.95);
+      border: 1px solid rgba(59,130,246,0.2);
+      box-shadow: 0 0 60px rgba(59,130,246,0.08), 0 25px 50px rgba(0,0,0,0.5);
+      backdrop-filter: blur(20px);
+    }
+    [data-theme="light"] #login-screen {
+      background: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.08) 0%, transparent 60%), #f8fafc;
+    }
+    [data-theme="light"] .login-card {
+      background: rgba(255,255,255,0.98);
+      border: 1px solid rgba(59,130,246,0.15);
+      box-shadow: 0 0 60px rgba(59,130,246,0.05), 0 25px 50px rgba(0,0,0,0.1);
+    }
+
+    /* ── App Layout ── */
+    #app { display: none; height: 100vh; overflow: hidden; }
+    #app.active { display: flex; flex-direction: column; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: rgba(15,23,42,0.98);
+      border-right: 1px solid rgba(59,130,246,0.1);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.3s ease, min-width 0.3s ease;
+    }
+    [data-theme="light"] .sidebar {
+      background: rgba(248,250,252,0.98);
+      border-right: 1px solid rgba(59,130,246,0.1);
+    }
+    .sidebar.collapsed { width: 60px; min-width: 60px; }
+    .sidebar.collapsed .sidebar-label { display: none; }
+    .sidebar.collapsed .logo-text { display: none; }
+    .sidebar.collapsed .folder-item { justify-content: center; padding: 10px; }
+    .sidebar.collapsed .badge { display: none; }
+
+    .folder-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-size: 13.5px;
+      font-weight: 450;
+      color: rgba(148,163,184,0.85);
+      margin: 2px 8px;
+    }
+    .folder-item:hover { background: rgba(59,130,246,0.1); color: #93c5fd; }
+    .folder-item.active { background: rgba(59,130,246,0.18); color: #60a5fa; border-left: 2px solid #3b82f6; margin-left: 6px; }
+    [data-theme="light"] .folder-item { color: rgba(71,85,105,0.9); }
+    [data-theme="light"] .folder-item:hover { background: rgba(59,130,246,0.08); color: #2563eb; }
+    [data-theme="light"] .folder-item.active { background: rgba(59,130,246,0.12); color: #1d4ed8; }
+
+    /* ── Email List ── */
+    .email-list-panel {
+      width: 340px;
+      min-width: 280px;
+      border-right: 1px solid rgba(59,130,246,0.1);
+      display: flex;
+      flex-direction: column;
+      background: rgba(15,23,42,0.6);
+    }
+    [data-theme="light"] .email-list-panel {
+      background: rgba(248,250,252,0.8);
+    }
+
+    .email-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(59,130,246,0.06);
+      cursor: pointer;
+      transition: background 0.12s ease;
+      position: relative;
+    }
+    .email-item:hover { background: rgba(59,130,246,0.07); }
+    .email-item.active { background: rgba(59,130,246,0.12); border-left: 3px solid #3b82f6; }
+    .email-item.unread .email-subject { font-weight: 600; color: #f1f5f9; }
+    [data-theme="light"] .email-item.unread .email-subject { color: #0f172a; }
+    .email-item.unread::after {
+      content: '';
+      position: absolute;
+      top: 16px;
+      right: 14px;
+      width: 7px;
+      height: 7px;
+      background: #3b82f6;
+      border-radius: 50%;
+    }
+    [data-theme="light"] .email-item:hover { background: rgba(59,130,246,0.05); }
+    [data-theme="light"] .email-item.active { background: rgba(59,130,246,0.1); }
+
+    .email-from { font-size: 12.5px; font-weight: 600; color: #94a3b8; margin-bottom: 3px; }
+    .email-subject { font-size: 13px; font-weight: 450; color: #cbd5e1; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .email-preview { font-size: 11.5px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .email-date { font-size: 10.5px; color: #475569; }
+    [data-theme="light"] .email-from { color: #64748b; }
+    [data-theme="light"] .email-subject { color: #334155; }
+    [data-theme="light"] .email-preview { color: #94a3b8; }
+
+    /* ── Email View ── */
+    .email-view-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .email-body-frame {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 36px;
+    }
+
+    .email-html-content {
+      max-width: 760px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #cbd5e1;
+    }
+    [data-theme="light"] .email-html-content { color: #334155; }
+    .email-html-content img { max-width: 100%; height: auto; border-radius: 6px; }
+    .email-html-content a { color: #60a5fa; text-decoration: underline; }
+    [data-theme="light"] .email-html-content a { color: #2563eb; }
+
+    /* ── Topbar ── */
+    .topbar {
+      height: 52px;
+      border-bottom: 1px solid rgba(59,130,246,0.1);
+      background: rgba(15,23,42,0.95);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    [data-theme="light"] .topbar {
+      background: rgba(248,250,252,0.98);
+    }
+
+    /* ── Compose ── */
+    .compose-overlay {
+      position: fixed;
+      bottom: 0;
+      right: 24px;
+      width: 540px;
+      max-height: 580px;
+      background: #0f172a;
+      border: 1px solid rgba(59,130,246,0.25);
+      border-bottom: none;
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 -10px 40px rgba(0,0,0,0.4);
+      z-index: 999;
+      display: none;
+      flex-direction: column;
+    }
+    [data-theme="light"] .compose-overlay {
+      background: #ffffff;
+      border: 1px solid rgba(59,130,246,0.2);
+    }
+    .compose-overlay.open { display: flex; }
+
+    /* ── Toast ── */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+    .toast-msg {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      animation: slideUp 0.3s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    @keyframes slideUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform: translateY(0); } }
+
+    /* ── Spinner ── */
+    .spin { animation: spin 0.8s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      opacity: 0.5;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .sidebar { width: 0; min-width: 0; overflow: hidden; }
+      .sidebar.mobile-open { width: 240px; min-width: 240px; position: fixed; left:0; top:0; height:100vh; z-index:200; }
+      .email-list-panel { width: 100%; }
+      .email-view-panel { display: none; }
+      .email-view-panel.mobile-open { display: flex; position: fixed; inset: 0; z-index: 100; background: #0f172a; }
+      [data-theme="light"] .email-view-panel.mobile-open { background: #f8fafc; }
+      .compose-overlay { width: calc(100vw - 16px); right: 8px; }
+      .email-body-frame { padding: 16px; }
+    }
+
+    /* ── Divider label ── */
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #475569;
+      padding: 12px 16px 4px;
+    }
+
+    /* ── Search bar ── */
+    .search-input {
+      background: rgba(30,41,59,0.8);
+      border: 1px solid rgba(59,130,246,0.15);
+      color: #cbd5e1;
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+    }
+    .search-input:focus { border-color: rgba(59,130,246,0.5); }
+    [data-theme="light"] .search-input {
+      background: rgba(241,245,249,0.9);
+      border: 1px solid rgba(59,130,246,0.15);
+      color: #334155;
+    }
+    [data-theme="light"] .search-input::placeholder { color: #94a3b8; }
+
+    .btn-icon {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      border: 1px solid rgba(59,130,246,0.15);
+      background: transparent;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-size: 14px;
+    }
+    .btn-icon:hover { background: rgba(59,130,246,0.1); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+    [data-theme="light"] .btn-icon { color: #64748b; }
+    [data-theme="light"] .btn-icon:hover { background: rgba(59,130,246,0.08); color: #2563eb; }
+
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    /* Notification dot */
+    .notif-dot {
+      width: 8px; height: 8px;
+      background: #ef4444;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.2)} }
+  </style>
+</head>
+<body class="bg-base-100 text-base-content">
+
+<!-- ══════════════════════════ LOGIN SCREEN ══════════════════════════ -->
+<div id="login-screen" class="fixed inset-0 flex items-center justify-center z-50">
+  <div class="login-card rounded-2xl p-8 w-full max-w-sm">
+    <!-- Logo -->
+    <div class="flex items-center gap-3 mb-8">
+      <div style="width:42px;height:42px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+      </div>
+      <div>
+        <div class="font-bold text-lg leading-none" style="color:#f1f5f9;">Netiify Mail</div>
+        <div class="text-xs" style="color:#475569;">netiify.cloud</div>
+      </div>
+    </div>
+
+    <div class="mb-5">
+      <div class="text-2xl font-semibold mb-1" style="color:#f1f5f9;">Connexion</div>
+      <div class="text-sm" style="color:#475569;">Accédez à votre messagerie</div>
+    </div>
+
+    <div id="login-error" class="hidden mb-4 p-3 rounded-lg text-sm font-medium" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);color:#f87171;"></div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-semibold mb-1 block" style="color:#64748b;letter-spacing:.05em;">ADRESSE EMAIL</label>
+        <input id="login-email" type="email" placeholder="vous@netiify.cloud" class="search-input w-full" style="padding:10px 14px;font-size:14px;" />
+      </div>
+      <div>
+        <label class="text-xs font-semibold mb-1 block" style="color:#64748b;letter-spacing:.05em;">MOT DE PASSE</label>
+        <div class="relative">
+          <input id="login-pwd" type="password" placeholder="••••••••" class="search-input w-full" style="padding:10px 14px;font-size:14px;padding-right:42px;" />
+          <button onclick="togglePwd()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors" style="background:none;border:none;cursor:pointer;padding:0;">
+            <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <button id="login-btn" onclick="doLogin()" class="w-full mt-6 py-3 rounded-xl font-semibold text-sm text-white transition-all" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 4px 20px rgba(59,130,246,0.3);">
+      Se connecter
+    </button>
+
+    <p class="text-xs text-center mt-5" style="color:#334155;">
+      IMAP/SMTP — <span style="color:#3b82f6;">mail.netiify.cloud</span>
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════ APP ══════════════════════════ -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="btn-icon" onclick="toggleSidebar()" title="Menu">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
+    <div class="flex items-center gap-2" style="margin-right:auto;">
+      <div style="width:28px;height:28px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+      </div>
+      <span class="font-semibold text-sm hidden sm:block" style="color:#f1f5f9;">Netiify Mail</span>
+    </div>
+
+    <!-- Notification bell -->
+    <div class="relative">
+      <button class="btn-icon" id="notif-btn" title="Notifications">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </button>
+      <span id="notif-dot" class="notif-dot absolute -top-1 -right-1 hidden"></span>
+    </div>
+
+    <!-- Theme toggle -->
+    <button class="btn-icon" onclick="toggleTheme()" title="Changer le thème">
+      <svg id="theme-icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="theme-icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+
+    <!-- User -->
+    <div class="flex items-center gap-2">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="hidden sm:flex flex-col">
+        <span class="text-xs font-semibold" style="color:#cbd5e1;" id="user-email-display">—</span>
+      </div>
+      <button class="btn-icon" onclick="doLogout()" title="Déconnexion">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar" id="sidebar">
+      <!-- Compose -->
+      <div class="p-3 pb-1">
+        <button onclick="openCompose()" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm text-white transition-all hover:opacity-90" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 4px 16px rgba(59,130,246,0.25);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span class="sidebar-label">Nouveau message</span>
+        </button>
+      </div>
+
+      <div class="section-label sidebar-label">Dossiers</div>
+
+      <!-- Folders list -->
+      <div id="folders-list" class="flex-1 overflow-y-auto">
+        <!-- Default folders -->
+        <div class="folder-item active" data-folder="INBOX" onclick="selectFolder('INBOX', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          <span class="sidebar-label flex-1">Boîte de réception</span>
+          <span class="badge badge-sm sidebar-label" id="inbox-count" style="background:rgba(59,130,246,0.2);color:#60a5fa;border:none;"></span>
+        </div>
+        <div class="folder-item" data-folder="Sent" onclick="selectFolder('Sent', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          <span class="sidebar-label">Envoyés</span>
+        </div>
+        <div class="folder-item" data-folder="Drafts" onclick="selectFolder('Drafts', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span class="sidebar-label">Brouillons</span>
+        </div>
+        <div class="folder-item" data-folder="Spam" onclick="selectFolder('Spam', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="sidebar-label">Spam</span>
+        </div>
+        <div class="folder-item" data-folder="Trash" onclick="selectFolder('Trash', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          <span class="sidebar-label">Corbeille</span>
+        </div>
+
+        <div id="extra-folders"></div>
+      </div>
+
+      <!-- Bottom info -->
+      <div class="p-3 border-t" style="border-color:rgba(59,130,246,0.1);">
+        <div class="flex items-center gap-2">
+          <div style="width:8px;height:8px;background:#22c55e;border-radius:50%;flex-shrink:0;"></div>
+          <span class="sidebar-label text-xs" style="color:#475569;">Connecté</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- EMAIL LIST -->
+    <div class="email-list-panel" id="email-list-panel">
+      <!-- Search & actions -->
+      <div class="p-3 border-b" style="border-color:rgba(59,130,246,0.1);">
+        <div class="flex items-center gap-2 mb-2">
+          <h2 class="font-semibold text-sm flex-1" id="folder-title" style="color:#f1f5f9;">Boîte de réception</h2>
+          <button class="btn-icon" onclick="refreshEmails()" title="Actualiser" id="refresh-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+        <input type="text" class="search-input" placeholder="Rechercher..." id="search-input" oninput="filterEmails()" />
+      </div>
+
+      <!-- Loading -->
+      <div id="emails-loading" class="flex items-center justify-center py-10 gap-3" style="color:#475569;font-size:13px;">
+        <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        Chargement…
+      </div>
+
+      <!-- Email list -->
+      <div id="emails-container" class="overflow-y-auto flex-1" style="display:none;"></div>
+
+      <!-- Empty -->
+      <div id="emails-empty" class="empty-state" style="display:none;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        <span class="text-sm font-medium">Aucun email</span>
+      </div>
+    </div>
+
+    <!-- EMAIL VIEW -->
+    <div class="email-view-panel" id="email-view-panel">
+      <!-- No email selected -->
+      <div id="no-email-selected" class="empty-state h-full">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.3;"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+        <span class="text-sm" style="opacity:0.4;">Sélectionnez un email</span>
+      </div>
+
+      <!-- Email loading -->
+      <div id="email-body-loading" class="empty-state h-full" style="display:none;">
+        <svg class="spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      </div>
+
+      <!-- Email content -->
+      <div id="email-content" style="display:none;height:100%;display:none;flex-direction:column;">
+        <!-- Email header -->
+        <div class="p-5 border-b" style="border-color:rgba(59,130,246,0.1);flex-shrink:0;">
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <h1 id="view-subject" class="font-bold text-lg leading-tight" style="color:#f1f5f9;flex:1;"></h1>
+            <div class="flex gap-2 flex-shrink-0">
+              <button class="btn-icon" onclick="replyEmail()" title="Répondre">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+              </button>
+              <button class="btn-icon" onclick="forwardEmail()" title="Transférer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+              </button>
+              <button class="btn-icon" onclick="deleteCurrentEmail()" title="Supprimer" style="color:#ef4444;border-color:rgba(239,68,68,0.2);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              </button>
+              <!-- Mobile back -->
+              <button class="btn-icon md:hidden" onclick="closeMobileView()" title="Retour">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 mb-3">
+            <div class="avatar" id="view-avatar" style="width:36px;height:36px;border-radius:10px;font-size:12px;">?</div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold text-sm" id="view-from" style="color:#cbd5e1;"></div>
+              <div class="text-xs" id="view-to" style="color:#475569;"></div>
+            </div>
+            <div class="text-xs flex-shrink-0" id="view-date" style="color:#475569;"></div>
+          </div>
+
+          <!-- Attachments -->
+          <div id="view-attachments" class="hidden flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Email body -->
+        <div class="email-body-frame">
+          <div id="email-html-body" class="email-html-content"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════ COMPOSE OVERLAY ══════════════ -->
+<div class="compose-overlay" id="compose-overlay">
+  <div class="flex items-center justify-between p-4 border-b" style="border-color:rgba(59,130,246,0.15);">
+    <span class="font-semibold text-sm" style="color:#f1f5f9;" id="compose-title">Nouveau message</span>
+    <div class="flex gap-2">
+      <button class="btn-icon" onclick="minimizeCompose()" title="Réduire">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="btn-icon" onclick="closeCompose()" title="Fermer" style="color:#ef4444;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="p-4 space-y-3 flex-1 overflow-y-auto">
+    <div>
+      <input id="compose-to" type="email" placeholder="À : destinataire@example.com" class="search-input w-full" />
+    </div>
+    <div>
+      <input id="compose-cc" type="email" placeholder="Cc :" class="search-input w-full" />
+    </div>
+    <div>
+      <input id="compose-subject" type="text" placeholder="Objet" class="search-input w-full" />
+    </div>
+    <div>
+      <textarea id="compose-body" rows="10" placeholder="Rédigez votre message..." class="search-input w-full resize-none" style="padding:10px 14px;line-height:1.6;"></textarea>
+    </div>
+  </div>
+  <div class="p-3 border-t flex items-center gap-2" style="border-color:rgba(59,130,246,0.15);">
+    <button onclick="sendEmail()" class="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white" style="background:linear-gradient(135deg,#3b82f6,#2563eb);">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Envoyer
+    </button>
+    <button onclick="closeCompose()" class="px-3 py-2 rounded-lg text-sm" style="color:#475569;">Annuler</button>
+    <div id="compose-status" class="flex-1 text-xs text-right" style="color:#475569;"></div>
+  </div>
+</div>
+
+<!-- ══════════ TOAST CONTAINER ══════════ -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════
+const S = {
+  emails: [],
+  filtered: [],
+  currentFolder: 'INBOX',
+  currentEmail: null,
+  currentUid: null,
+  userEmail: null,
+  sidebarCollapsed: false,
+  socket: null,
+  composeMode: null, // null | 'new' | 'reply' | 'forward'
+};
+
+// ════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════
+(async () => {
+  const theme = localStorage.getItem('theme') || 'dark';
+  setTheme(theme);
+
+  const res = await fetch('/api/me').then(r => r.json());
+  if (res.ok) {
+    await startApp(res.email);
+  }
+})();
+
+async function startApp(email) {
+  S.userEmail = email;
+  document.getElementById('user-email-display').textContent = email;
+  document.getElementById('user-avatar').textContent = email[0].toUpperCase();
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  await loadFolders();
+  await loadEmails();
+  startSocketPoll();
+}
+
+// ════════════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════════════
+function togglePwd() {
+  const inp = document.getElementById('login-pwd');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pwd = document.getElementById('login-pwd').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+
+  if (!email || !pwd) { showError('Veuillez remplir tous les champs.'); return; }
+
+  btn.textContent = 'Connexion en cours…';
+  btn.disabled = true;
+  errEl.classList.add('hidden');
+
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pwd })
+  }).then(r => r.json());
+
+  if (res.ok) {
+    await startApp(res.email);
+  } else {
+    errEl.textContent = res.error || 'Erreur de connexion';
+    errEl.classList.remove('hidden');
+    btn.textContent = 'Se connecter';
+    btn.disabled = false;
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function doLogout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
+}
+
+// Enter key on login
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+    doLogin();
+  }
+});
+
+// ════════════════════════════════════════════════════
+//  FOLDERS
+// ════════════════════════════════════════════════════
+async function loadFolders() {
+  const res = await fetch('/api/folders').then(r => r.json());
+  if (!res.ok) return;
+
+  const known = ['INBOX', 'Sent', 'Drafts', 'Spam', 'Trash', 'INBOX.Sent', 'INBOX.Trash', 'INBOX.Spam', 'INBOX.Drafts'];
+  const extra = res.folders.filter(f => !known.some(k => k.toLowerCase() === f.toLowerCase()));
+  const container = document.getElementById('extra-folders');
+
+  if (extra.length > 0) {
+    container.innerHTML = `<div class="section-label sidebar-label">Autres</div>` +
+      extra.map(f => `
+        <div class="folder-item" data-folder="${esc(f)}" onclick="selectFolder('${esc(f)}', this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span class="sidebar-label">${esc(f)}</span>
+        </div>
+      `).join('');
+  }
+}
+
+function selectFolder(folder, el) {
+  S.currentFolder = folder;
+  S.currentEmail = null;
+  S.currentUid = null;
+
+  // Update active state
+  document.querySelectorAll('.folder-item').forEach(f => f.classList.remove('active'));
+  el.classList.add('active');
+
+  // Update title
+  const titles = {
+    'INBOX': 'Boîte de réception',
+    'Sent': 'Envoyés', 'INBOX.Sent': 'Envoyés',
+    'Drafts': 'Brouillons', 'INBOX.Drafts': 'Brouillons',
+    'Spam': 'Spam', 'INBOX.Spam': 'Spam',
+    'Trash': 'Corbeille', 'INBOX.Trash': 'Corbeille',
+  };
+  document.getElementById('folder-title').textContent = titles[folder] || folder;
+
+  // Hide email view
+  document.getElementById('no-email-selected').style.display = '';
+  document.getElementById('email-content').style.display = 'none';
+
+  loadEmails();
+
+  // Close mobile sidebar
+  document.getElementById('sidebar').classList.remove('mobile-open');
+}
+
+// ════════════════════════════════════════════════════
+//  EMAILS LIST
+// ════════════════════════════════════════════════════
+async function loadEmails() {
+  document.getElementById('emails-loading').style.display = 'flex';
+  document.getElementById('emails-container').style.display = 'none';
+  document.getElementById('emails-empty').style.display = 'none';
+
+  const res = await fetch(`/api/emails?folder=${encodeURIComponent(S.currentFolder)}&limit=80`).then(r => r.json());
+
+  document.getElementById('emails-loading').style.display = 'none';
+
+  if (!res.ok) { toast(res.error, 'error'); return; }
+
+  S.emails = res.emails;
+  S.filtered = [...S.emails];
+
+  // Update inbox count
+  if (S.currentFolder === 'INBOX') {
+    const unread = S.emails.filter(e => !e.flags.includes('\\Seen')).length;
+    const badge = document.getElementById('inbox-count');
+    badge.textContent = unread > 0 ? unread : '';
+  }
+
+  renderEmailList();
+}
+
+async function refreshEmails() {
+  const btn = document.getElementById('refresh-btn');
+  btn.querySelector('svg').classList.add('spin');
+  await loadEmails();
+  btn.querySelector('svg').classList.remove('spin');
+  toast('Boîte actualisée', 'success');
+}
+
+function filterEmails() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  S.filtered = q
+    ? S.emails.filter(e =>
+        (e.headers.subject || '').toLowerCase().includes(q) ||
+        (e.headers.from || '').toLowerCase().includes(q)
+      )
+    : [...S.emails];
+  renderEmailList();
+}
+
+function renderEmailList() {
+  const container = document.getElementById('emails-container');
+  const empty = document.getElementById('emails-empty');
+
+  if (S.filtered.length === 0) {
+    container.style.display = 'none';
+    empty.style.display = 'flex';
+    return;
+  }
+
+  container.style.display = 'block';
+  empty.style.display = 'none';
+
+  container.innerHTML = S.filtered.map(email => {
+    const isUnread = !email.flags.includes('\\Seen');
+    const from = parseFrom(email.headers.from || '');
+    const date = formatDate(email.headers.date);
+    const isActive = email.uid === S.currentUid;
+    return `
+      <div class="email-item ${isUnread ? 'unread' : ''} ${isActive ? 'active' : ''}"
+           data-uid="${email.uid}" onclick="openEmail(${email.uid})">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <div class="email-from flex-1 min-w-0" style="${isUnread ? 'color:#93c5fd;' : ''}">${esc(from.name || from.email)}</div>
+          <div class="email-date flex-shrink-0">${date}</div>
+        </div>
+        <div class="email-subject">${esc(email.headers.subject || '(Pas de sujet)')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════
+//  EMAIL VIEW
+// ════════════════════════════════════════════════════
+async function openEmail(uid) {
+  S.currentUid = uid;
+
+  // Update active in list
+  document.querySelectorAll('.email-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.uid) === uid);
+  });
+  // Mark as read in state
+  const emailMeta = S.emails.find(e => e.uid === uid);
+  if (emailMeta) {
+    emailMeta.flags = [...(emailMeta.flags || []), '\\Seen'];
+    // Re-render to remove unread dot
+    const item = document.querySelector(`.email-item[data-uid="${uid}"]`);
+    if (item) item.classList.remove('unread');
+    // Update inbox count
+    if (S.currentFolder === 'INBOX') {
+      const unread = S.emails.filter(e => !e.flags.includes('\\Seen')).length;
+      document.getElementById('inbox-count').textContent = unread > 0 ? unread : '';
+    }
+  }
+
+  // Show loading
+  document.getElementById('no-email-selected').style.display = 'none';
+  document.getElementById('email-body-loading').style.display = 'flex';
+  document.getElementById('email-content').style.display = 'none';
+
+  // Mobile: show view panel
+  document.getElementById('email-view-panel').classList.add('mobile-open');
+
+  const res = await fetch(`/api/email/${uid}?folder=${encodeURIComponent(S.currentFolder)}`).then(r => r.json());
+
+  document.getElementById('email-body-loading').style.display = 'none';
+
+  if (!res.ok) { toast(res.error, 'error'); return; }
+
+  const email = res.email;
+  S.currentEmail = email;
+
+  const from = parseFrom(email.from || '');
+
+  document.getElementById('view-subject').textContent = email.subject || '(Pas de sujet)';
+  document.getElementById('view-from').textContent = email.from || '';
+  document.getElementById('view-to').textContent = 'À : ' + (email.to || '');
+  document.getElementById('view-date').textContent = email.date ? new Date(email.date).toLocaleString('fr-FR') : '';
+  document.getElementById('view-avatar').textContent = (from.name || from.email || '?')[0].toUpperCase();
+
+  // Body
+  const bodyEl = document.getElementById('email-html-body');
+  if (email.html) {
+    // Sanitize and render HTML
+    const sanitized = sanitizeHtml(email.html);
+    bodyEl.innerHTML = sanitized;
+  } else {
+    bodyEl.innerHTML = `<pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.7;">${esc(email.text || '')}</pre>`;
+  }
+
+  // Attachments
+  const attEl = document.getElementById('view-attachments');
+  if (email.attachments && email.attachments.length > 0) {
+    attEl.classList.remove('hidden');
+    attEl.innerHTML = email.attachments.map(a => `
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:#93c5fd;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        ${esc(a.filename || 'fichier')} <span style="color:#475569;">(${formatSize(a.size)})</span>
+      </div>
+    `).join('');
+  } else {
+    attEl.classList.add('hidden');
+    attEl.innerHTML = '';
+  }
+
+  document.getElementById('email-content').style.display = 'flex';
+}
+
+function closeMobileView() {
+  document.getElementById('email-view-panel').classList.remove('mobile-open');
+}
+
+async function deleteCurrentEmail() {
+  if (!S.currentUid) return;
+  const res = await fetch(`/api/email/${S.currentUid}?folder=${encodeURIComponent(S.currentFolder)}`, { method: 'DELETE' }).then(r => r.json());
+  if (res.ok) {
+    toast('Email supprimé', 'success');
+    S.emails = S.emails.filter(e => e.uid !== S.currentUid);
+    S.currentUid = null;
+    S.currentEmail = null;
+    document.getElementById('email-content').style.display = 'none';
+    document.getElementById('no-email-selected').style.display = '';
+    renderEmailList();
+  } else {
+    toast(res.error, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  COMPOSE
+// ════════════════════════════════════════════════════
+function openCompose(mode = 'new') {
+  S.composeMode = mode;
+  document.getElementById('compose-title').textContent = mode === 'reply' ? 'Répondre' : mode === 'forward' ? 'Transférer' : 'Nouveau message';
+  document.getElementById('compose-overlay').classList.add('open');
+  document.getElementById('compose-to').focus();
+}
+
+function closeCompose() {
+  document.getElementById('compose-overlay').classList.remove('open');
+  document.getElementById('compose-to').value = '';
+  document.getElementById('compose-cc').value = '';
+  document.getElementById('compose-subject').value = '';
+  document.getElementById('compose-body').value = '';
+  document.getElementById('compose-status').textContent = '';
+}
+
+function minimizeCompose() {
+  document.getElementById('compose-overlay').classList.remove('open');
+}
+
+function replyEmail() {
+  if (!S.currentEmail) return;
+  const from = parseFrom(S.currentEmail.from || '');
+  document.getElementById('compose-to').value = S.currentEmail.from || '';
+  document.getElementById('compose-subject').value = 'Re: ' + (S.currentEmail.subject || '');
+  document.getElementById('compose-body').value = `\n\n---\nDe : ${S.currentEmail.from}\nDate : ${S.currentEmail.date ? new Date(S.currentEmail.date).toLocaleString('fr-FR') : ''}\nObjet : ${S.currentEmail.subject}\n\n${S.currentEmail.text || ''}`;
+  openCompose('reply');
+}
+
+function forwardEmail() {
+  if (!S.currentEmail) return;
+  document.getElementById('compose-subject').value = 'Fwd: ' + (S.currentEmail.subject || '');
+  document.getElementById('compose-body').value = `\n\n------- Message transféré -------\nDe : ${S.currentEmail.from}\nDate : ${S.currentEmail.date ? new Date(S.currentEmail.date).toLocaleString('fr-FR') : ''}\nObjet : ${S.currentEmail.subject}\n\n${S.currentEmail.text || ''}`;
+  openCompose('forward');
+}
+
+async function sendEmail() {
+  const to = document.getElementById('compose-to').value.trim();
+  const cc = document.getElementById('compose-cc').value.trim();
+  const subject = document.getElementById('compose-subject').value.trim();
+  const body = document.getElementById('compose-body').value.trim();
+  const status = document.getElementById('compose-status');
+
+  if (!to || !subject || !body) {
+    status.style.color = '#ef4444';
+    status.textContent = 'Champs obligatoires manquants';
+    return;
+  }
+
+  status.style.color = '#60a5fa';
+  status.textContent = 'Envoi en cours…';
+
+  const res = await fetch('/api/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to, cc, subject, body })
+  }).then(r => r.json());
+
+  if (res.ok) {
+    toast('Email envoyé avec succès !', 'success');
+    closeCompose();
+  } else {
+    status.style.color = '#ef4444';
+    status.textContent = res.error || 'Erreur d\'envoi';
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  SOCKET – Real-time polling
+// ════════════════════════════════════════════════════
+function startSocketPoll() {
+  S.socket = io();
+  S.socket.emit('start_poll', {
+    email: S.userEmail,
+    password: '', // server already has the session
+    folder: 'INBOX'
+  });
+  S.socket.on('new_mail', (data) => {
+    document.getElementById('notif-dot').classList.remove('hidden');
+    toast(`${data.count} nouveau(x) message(s) reçu(s)`, 'info');
+    if (S.currentFolder === 'INBOX') {
+      loadEmails();
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════
+//  THEME
+// ════════════════════════════════════════════════════
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  setTheme(next);
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  document.getElementById('theme-icon-moon').style.display = theme === 'dark' ? 'block' : 'none';
+  document.getElementById('theme-icon-sun').style.display = theme === 'light' ? 'block' : 'none';
+}
+
+// ════════════════════════════════════════════════════
+//  SIDEBAR
+// ════════════════════════════════════════════════════
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (window.innerWidth < 768) {
+    sidebar.classList.toggle('mobile-open');
+  } else {
+    S.sidebarCollapsed = !S.sidebarCollapsed;
+    sidebar.classList.toggle('collapsed', S.sidebarCollapsed);
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════════
+function toast(msg, type = 'info') {
+  const colors = {
+    success: 'background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#4ade80;',
+    error: 'background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;',
+    info: 'background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:#60a5fa;',
+    warning: 'background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#fbbf24;',
+  };
+  const el = document.createElement('div');
+  el.className = 'toast-msg';
+  el.style.cssText = colors[type] || colors.info;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function parseFrom(from) {
+  const match = from.match(/^"?([^"<]+)"?\s*<?([^>]*)>?$/);
+  if (match) return { name: match[1].trim(), email: match[2].trim() };
+  return { name: '', email: from };
+}
+
+function formatDate(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'À l\'instant';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'min';
+  if (diff < 86400000) return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  if (diff < 604800000) return d.toLocaleDateString('fr-FR', { weekday: 'short' });
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function sanitizeHtml(html) {
+  // Basic sanitization: remove script tags and event handlers
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+}
+</script>
+</body>
+</html>

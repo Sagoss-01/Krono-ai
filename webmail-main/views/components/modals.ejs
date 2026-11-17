@@ -1,0 +1,333 @@
+<!-- views/components/modals.ejs -->
+
+<!-- ── SETTINGS MODAL ── -->
+<div class="modal-overlay" id="modal-settings" style="display:none;" onclick="App.closeModal('modal-settings')">
+  <div class="modal-card" onclick="event.stopPropagation()" style="max-width:520px;">
+    <div class="modal-header">
+      <span class="modal-title">Paramètres</span>
+      <button class="icon-btn-sm" onclick="App.closeModal('modal-settings')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="settings-tabs">
+      <button class="settings-tab active" id="stab-general"   onclick="Settings.showTab('general')">Général</button>
+      <button class="settings-tab"        id="stab-signature" onclick="Settings.showTab('signature')">Signature</button>
+      <button class="settings-tab"        id="stab-security"  onclick="Settings.showTab('security')">Sécurité</button>
+      <button class="settings-tab"        id="stab-accounts"  onclick="Settings.showTab('accounts')">Comptes</button>
+      <button class="settings-tab"        id="stab-privacy"   onclick="Settings.showTab('privacy')">Confidentialité</button>
+      <button class="settings-tab"        id="stab-server"    onclick="Settings.showTab('server')">Serveur</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Général -->
+      <div id="stab-panel-general">
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Thème</div>
+            <div class="setting-desc">Apparence de l'interface</div>
+          </div>
+          <div class="theme-toggle-group">
+            <button class="theme-btn active" id="theme-dark-btn"  onclick="App.setTheme('dark')">Sombre</button>
+            <button class="theme-btn"        id="theme-light-btn" onclick="App.setTheme('light')">Clair</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signature -->
+      <div id="stab-panel-signature" style="display:none;">
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+          Le <strong>header</strong> est inséré avant votre message, le <strong>footer</strong> après. HTML supporté.
+        </p>
+        <div class="field-group">
+          <label class="field-label">Header</label>
+          <textarea id="sig-header" class="sig-editor" placeholder="Ex: <b>Cordialement,</b><br>Jean Dupont"></textarea>
+        </div>
+        <div class="field-group" style="margin-top:12px;">
+          <label class="field-label">Footer</label>
+          <textarea id="sig-footer" class="sig-editor" placeholder="Ex: Tél : +33 6 00 00 00 00"></textarea>
+        </div>
+        <div class="sig-preview-toggle">
+          <button class="sig-preview-btn" onclick="Settings.togglePreview()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Aperçu
+          </button>
+        </div>
+        <div id="sig-preview" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;margin-top:8px;background:var(--bg-card);min-height:60px;"></div>
+        <div id="sig-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:18px;"></div>
+        <button class="btn-modal-submit" onclick="Settings.saveSignature()" style="margin-top:10px;">Enregistrer</button>
+      </div>
+
+      <!-- Sécurité -->
+      <div id="stab-panel-security" style="display:none;">
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+          Comme vous ne recevez pas de SMS, cet email de secours sert à réinitialiser votre mot de passe si vous l'oubliez.
+        </p>
+
+        <div id="recovery-status-block">
+          <div style="font-size:12px;color:var(--text-muted);">Chargement…</div>
+        </div>
+
+        <div id="recovery-link-form" style="margin-top:14px;">
+          <div class="field-group">
+            <label class="field-label">Adresse email de secours</label>
+            <input type="email" id="recovery-email-inp" class="modal-inp" placeholder="ex: perso@gmail.com" />
+          </div>
+          <div id="recovery-link-status" style="font-size:12px;margin:8px 0;min-height:16px;"></div>
+          <button class="btn-modal-submit" onclick="Settings.linkRecoveryEmail()">Envoyer un code de confirmation</button>
+        </div>
+
+        <div id="recovery-confirm-form" style="margin-top:14px;display:none;">
+          <div class="field-group">
+            <label class="field-label">Code reçu (6 chiffres)</label>
+            <input type="text" id="recovery-code-inp" class="modal-inp" placeholder="000000" maxlength="6" inputmode="numeric" />
+          </div>
+          <div id="recovery-confirm-status" style="font-size:12px;margin:8px 0;min-height:16px;"></div>
+          <button class="btn-modal-submit" onclick="Settings.confirmRecoveryEmail()">Confirmer</button>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
+
+        <h4 style="margin:0 0 12px;font-size:13px;color:var(--text1);">Changer le mot de passe</h4>
+        <div class="field-group">
+          <label class="field-label">Mot de passe actuel</label>
+          <input type="password" id="pwd-current-inp" class="modal-inp" autocomplete="current-password" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Nouveau mot de passe</label>
+          <input type="password" id="pwd-new-inp" class="modal-inp" autocomplete="new-password" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Confirmer le nouveau mot de passe</label>
+          <input type="password" id="pwd-new2-inp" class="modal-inp" autocomplete="new-password" />
+        </div>
+        <div id="pwd-change-status" style="font-size:12px;margin:8px 0;min-height:16px;"></div>
+        <button class="btn-modal-submit" onclick="Settings.changePassword()">Changer le mot de passe</button>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:24px 0;" />
+
+        <h4 style="margin:0 0 12px;font-size:13px;color:var(--text1);">Authentification à deux facteurs</h4>
+        <div id="twofa-status-block" style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Chargement…</div>
+
+        <!-- Étape 1 : lancer l'activation -->
+        <div id="twofa-start-block" style="display:none;">
+          <button class="btn-modal-submit" onclick="Settings.start2FASetup()">Activer la 2FA</button>
+        </div>
+
+        <!-- Étape 2 : scanner le QR ou entrer la clé manuellement, puis confirmer avec un code -->
+        <div id="twofa-setup-block" style="display:none;">
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px;">
+            <img id="twofa-qr-img" src="" alt="QR code 2FA" style="width:150px;height:150px;border-radius:10px;background:#fff;padding:8px;" />
+            <div style="flex:1;min-width:180px;">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Scanne ce QR code avec Google Authenticator, Authy, etc. — ou entre la clé manuellement :</div>
+              <code id="twofa-manual-key" style="display:block;padding:8px 10px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);font-size:11px;word-break:break-all;color:var(--text1);"></code>
+            </div>
+          </div>
+
+          <div id="twofa-backup-codes-block" style="margin-bottom:14px;padding:12px;border-radius:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);">
+            <div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:8px;">⚠ Codes de secours (à noter maintenant — affichés une seule fois)</div>
+            <div id="twofa-backup-codes-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-family:monospace;font-size:12px;color:var(--text1);"></div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Code de vérification (depuis ton application)</label>
+            <input type="text" id="twofa-confirm-code" class="modal-inp" placeholder="123456" maxlength="6" inputmode="numeric" />
+          </div>
+          <div id="twofa-setup-status" style="font-size:12px;margin:8px 0;min-height:16px;"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-modal-submit" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--text1);" onclick="Settings.cancel2FASetup()">Annuler</button>
+            <button class="btn-modal-submit" style="flex:2;" onclick="Settings.confirm2FASetup()">Confirmer et activer</button>
+          </div>
+        </div>
+
+        <!-- État activé -->
+        <div id="twofa-enabled-block" style="display:none;">
+          <div style="font-size:12px;color:#22c55e;margin-bottom:12px;">✓ Authentification à deux facteurs activée</div>
+          <div class="field-group">
+            <label class="field-label">Mot de passe (pour désactiver)</label>
+            <input type="password" id="twofa-disable-pwd" class="modal-inp" autocomplete="current-password" />
+          </div>
+          <div id="twofa-disable-status" style="font-size:12px;margin:8px 0;min-height:16px;"></div>
+          <button class="btn-modal-submit" style="background:transparent;border:1px solid rgba(248,113,113,.4);color:#f87171;" onclick="Settings.disable2FA()">Désactiver la 2FA</button>
+        </div>
+      </div>
+
+      <!-- Comptes -->
+      <div id="stab-panel-accounts" style="display:none;">
+        <div class="setting-section-title" style="margin-bottom:10px;">Comptes connectés</div>
+        <div id="settings-accounts-list"></div>
+        <button class="btn-add-account" onclick="App.closeModal('modal-settings'); App.openAddAccount();">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Ajouter un autre compte
+        </button>
+      </div>
+
+      <!-- Confidentialité (RGPD) -->
+      <div id="stab-panel-privacy" style="display:none;">
+        <div class="setting-section-title" style="margin-bottom:6px;">Mes données</div>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;">
+          Télécharge une copie de toutes les données associées à ton compte, ou supprime définitivement ton compte et son contenu.
+        </p>
+
+        <button class="btn-modal-submit" style="margin-bottom:20px;" onclick="Settings.exportMyData()">
+          Télécharger mes données (JSON)
+        </button>
+
+        <div style="height:1px;background:var(--border);margin-bottom:20px;"></div>
+
+        <div class="setting-section-title" style="margin-bottom:6px;color:#f87171;">Zone dangereuse</div>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;">
+          Supprime définitivement ton compte, ta boîte mail, tes contacts, ton calendrier et tes appareils enregistrés.
+          Les messages déjà envoyés à d'autres personnes sont anonymisés plutôt que supprimés, pour ne pas casser leurs conversations.
+          <strong style="color:#f87171;">Cette action est irréversible.</strong>
+        </p>
+        <button class="btn-modal-submit" style="background:transparent;border:1px solid rgba(248,113,113,.4);color:#f87171;box-shadow:none;" onclick="Settings.openDeleteAccountConfirm()">
+          Supprimer mon compte
+        </button>
+
+        <div id="delete-account-confirm" style="display:none;margin-top:16px;padding:14px;border-radius:12px;border:1px solid rgba(248,113,113,.3);background:rgba(248,113,113,.05);">
+          <label class="field-label">Tape SUPPRIMER pour confirmer</label>
+          <input type="text" id="delete-account-word" class="modal-inp" placeholder="SUPPRIMER" style="margin-bottom:10px;">
+          <label class="field-label">Ton mot de passe</label>
+          <input type="password" id="delete-account-password" class="modal-inp" placeholder="••••••••" style="margin-bottom:12px;">
+          <div style="display:flex;gap:8px;">
+            <button class="btn-modal-submit" style="background:transparent;border:1px solid var(--border);color:var(--text-1);box-shadow:none;" onclick="document.getElementById('delete-account-confirm').style.display='none';">Annuler</button>
+            <button class="btn-modal-submit" style="background:linear-gradient(135deg,#dc2626,#b91c1c);" id="delete-account-btn" onclick="Settings.confirmDeleteAccount()">Supprimer définitivement</button>
+          </div>
+          <div id="delete-account-msg" style="font-size:12px;margin-top:10px;display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Serveur -->
+      <div id="stab-panel-server" style="display:none;">
+        <div class="setting-section-title" style="margin-bottom:10px;">Serveur de messagerie</div>
+        <div class="server-info-block">
+          <div class="server-row"><span>IMAP</span><code>mail.netiify.cloud:993 (SSL)</code></div>
+          <div class="server-row"><span>SMTP</span><code>mail.netiify.cloud:587 (STARTTLS)</code></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-account" style="display:none;" onclick="App.closeModal('modal-add-account')">
+  <div class="modal-card" onclick="event.stopPropagation()" style="max-width:400px;">
+    <div class="modal-header">
+      <span class="modal-title">Ajouter un compte</span>
+      <button class="icon-btn-sm" onclick="App.closeModal('modal-add-account')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="add-account-error" class="modal-error" style="display:none;"></div>
+      <div class="field-group">
+        <label class="field-label">Adresse email</label>
+        <div class="email-split-inp">
+          <input type="text" id="add-username" class="split-left" placeholder="votre.nom" />
+          <select id="add-domain" class="split-domain-select">
+            <option value="@netiify.cloud">@netiify.cloud</option>
+            <option value="@kweapp.com">@kweapp.com</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Mot de passe</label>
+        <input type="password" id="add-password" class="modal-inp" placeholder="••••••••" />
+      </div>
+      <button class="btn-modal-submit" id="add-account-btn" onclick="App.submitAddAccount()">
+        Connecter ce compte
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── APPAREILS CONNECTÉS ── -->
+<div class="modal-overlay" id="modal-devices" style="display:none;" onclick="App.closeModal('modal-devices')">
+  <div class="modal-card" onclick="event.stopPropagation()" style="max-width:640px;">
+    <div class="modal-header">
+      <span class="modal-title">Appareils connectés</span>
+      <button class="icon-btn-sm" onclick="App.closeModal('modal-devices')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;gap:0;padding:12px 22px 0;flex-shrink:0;border-bottom:1px solid var(--border);">
+      <button id="dtab-devices" onclick="DevicesUI.showTab('devices')" style="flex:1;padding:8px 4px;border:none;border-bottom:2px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:800;cursor:pointer;font-family:'Sora',sans-serif;">Appareils</button>
+      <button id="dtab-history" onclick="DevicesUI.showTab('history')" style="flex:1;padding:8px 4px;border:none;border-bottom:2px solid transparent;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">Historique de connexion</button>
+    </div>
+    <div class="modal-body">
+      <div id="dtab-panel-devices">
+        <p class="setting-desc">
+          <strong>Retirer</strong> déconnecte l'appareil (reconnexion possible avec le bon mot de passe).
+          <strong>Bloquer</strong> l'empêche définitivement de se reconnecter, même avec le bon mot de passe.
+        </p>
+        <div id="devices-modal-list">Chargement…</div>
+      </div>
+      <div id="dtab-panel-history" style="display:none;">
+        <p class="setting-desc">Les 30 derniers événements de sécurité liés à ton compte — connexions, échecs, changements de mot de passe et de double authentification.</p>
+        <div id="history-modal-list">Chargement…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONNEXION RAPIDE (QR) ── -->
+<div class="modal-overlay" id="modal-quick-connect" style="display:none;" onclick="App.closeModal('modal-quick-connect')">
+  <div class="modal-card" onclick="event.stopPropagation()" style="max-width:460px;">
+    <div class="modal-header">
+      <span class="modal-title">Connexion rapide</span>
+      <button class="icon-btn-sm" onclick="App.closeModal('modal-quick-connect')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <div id="qc-modal-qr" style="width:220px;height:220px;margin:0 auto;background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+        <span style="color:#333;font-size:12px;">Génération…</span>
+      </div>
+      <p class="setting-desc">
+        Ouvre l'appareil photo de ton téléphone (ou un autre navigateur) et scanne ce code
+        pour t'y connecter instantanément, sans mot de passe.
+      </p>
+      <div id="qc-modal-timer" style="font-size:12px;color:#f59e0b;font-weight:700;"></div>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="qc-modal-link" class="modal-inp" readonly style="font-size:11px;">
+        <button class="btn-modal-submit" style="width:auto;padding:10px 14px;" onclick="QuickConnectUI.copyLink()">Copier</button>
+      </div>
+      <div id="qc-modal-status" style="font-size:13px;padding:10px;border-radius:10px;display:none;"></div>
+      <div style="height:1px;background:var(--border);"></div>
+      <a href="/quick-connect/new-device" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--accent);text-decoration:none;">
+        Connecter un nouvel appareil qui n'est pas encore connecté &rarr;
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── APPROBATION CONNEXION RAPIDE (scanné depuis un appareil déjà connecté) ── -->
+<div class="modal-overlay" id="modal-quick-approve" style="display:none;" onclick="App.closeModal('modal-quick-approve')">
+  <div class="modal-card" onclick="event.stopPropagation()" style="max-width:440px;">
+    <div class="modal-header">
+      <span class="modal-title">Autoriser cet appareil ?</span>
+      <button class="icon-btn-sm" onclick="App.closeModal('modal-quick-approve')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="setting-desc">
+        Un appareil demande à se connecter à <strong style="color:var(--text-1);">ton compte</strong>, sans mot de passe.
+        Vérifie que c'est bien toi avant d'accepter.
+      </p>
+      <div id="qc-approve-info" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:14px 16px;font-size:12px;color:#fbbf24;line-height:1.9;">
+        Chargement…
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-modal-submit" style="background:transparent;border:1px solid rgba(248,113,113,.35);color:#f87171;box-shadow:none;" onclick="QuickConnectUI.decideApprove('deny')">Refuser</button>
+        <button class="btn-modal-submit" style="background:linear-gradient(135deg,#22c55e,#16a34a);" onclick="QuickConnectUI.decideApprove('approve')">Autoriser</button>
+      </div>
+      <div id="qc-approve-msg" style="font-size:13px;padding:10px;border-radius:10px;display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST CONTAINER ── -->
+<div id="toasts"></div>

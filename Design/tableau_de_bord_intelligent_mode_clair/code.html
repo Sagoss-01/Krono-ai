@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Aura AI - Smart Scheduling Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "inverse-on-surface": "#f5f0ee",
+                      "surface-dim": "#ddd9d8",
+                      "surface-container-lowest": "#ffffff",
+                      "on-secondary-fixed": "#002113",
+                      "outline-variant": "#c2c6d6",
+                      "tertiary-container": "#ffdbca",
+                      "on-tertiary-fixed-variant": "#783200",
+                      "background": "#fdf8f8",
+                      "primary-fixed-dim": "#adc6ff",
+                      "inverse-surface": "#313030",
+                      "on-error": "#ffffff",
+                      "on-secondary-container": "#002113",
+                      "secondary-fixed": "#6ffbbe",
+                      "surface-variant": "#e1e2ec",
+                      "on-primary-fixed-variant": "#004395",
+                      "secondary": "#006d4a",
+                      "on-tertiary-fixed": "#341100",
+                      "on-primary": "#ffffff",
+                      "primary": "#005ac2",
+                      "on-tertiary": "#ffffff",
+                      "surface": "#fdf8f8",
+                      "primary-container": "#d8e2ff",
+                      "on-surface-variant": "#44474e",
+                      "inverse-primary": "#adc6ff",
+                      "outline": "#74777f",
+                      "tertiary-fixed-dim": "#ffb690",
+                      "primary-fixed": "#d8e2ff",
+                      "on-secondary": "#ffffff",
+                      "on-secondary-fixed-variant": "#005236",
+                      "surface-container-highest": "#e5e2e1",
+                      "surface-bright": "#fdf8f8",
+                      "on-surface": "#1c1b1b",
+                      "on-tertiary-container": "#341100",
+                      "secondary-container": "#6ffbbe",
+                      "surface-container-low": "#f7f3f2",
+                      "error-container": "#ffdad6",
+                      "on-primary-container": "#001a42",
+                      "on-error-container": "#410002",
+                      "surface-container": "#f1edec",
+                      "surface-container-high": "#ebe7e6",
+                      "surface-tint": "#005ac2",
+                      "secondary-fixed-dim": "#4edea3",
+                      "tertiary-fixed": "#ffdbca",
+                      "on-primary-fixed": "#001a42",
+                      "error": "#ba1a1a",
+                      "tertiary": "#8f4c00",
+                      "on-background": "#1c1b1b"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-gap": "12px",
+                      "lg": "24px",
+                      "xl": "32px",
+                      "md": "16px",
+                      "sm": "12px",
+                      "base": "4px",
+                      "container-padding": "20px",
+                      "xs": "8px"
+              },
+              "fontFamily": {
+                      "label-caps": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "title-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "display-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-lg-mobile": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+      </script>
+<style>
+        body { background-color: #fdf8f8; font-family: 'Inter', sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(0, 0, 0, 0.08); }
+        .glow-blue { box-shadow: 0 4px 20px rgba(0, 90, 194, 0.12); }
+        .glow-red { box-shadow: 0 4px 15px rgba(186, 26, 26, 0.1); }
+        .glow-green { box-shadow: 0 4px 15px rgba(0, 109, 74, 0.1); }
+        .conflict-hatch { background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(143, 76, 0, 0.05) 10px, rgba(143, 76, 0, 0.05) 20px); }
+        .timeline-line { background: linear-gradient(to bottom, rgba(0, 90, 194, 0.2) 0%, transparent 100%); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+        body {
+          min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="text-on-surface antialiased overflow-hidden">
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-outline-variant/30 shadow-sm flex justify-between items-center px-container-padding py-md">
+<div class="flex items-center gap-xs">
+<h1 class="font-display-lg text-title-md tracking-tight text-primary">Aura AI</h1>
+</div>
+<div class="flex items-center gap-md">
+<button class="active:scale-95 transition-transform hover:opacity-80">
+<span class="material-symbols-outlined text-primary" data-icon="notifications">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full border border-primary/10 bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional portrait of a tech executive in a high-fidelity minimalist setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtV8ts1xQR-ptv41uLsEZBbHTSVsP7gOBkxYXLhSEu0rqZ4mc7JhefUrxYVGaOb0O3-iIa0kiYbd2hY3DYvbL9PBWag6WPedjKVM10SgyghpvkcocuV3az9cWMwKAtL1CQC-G3FsEJ7R_uOGzPRDD6bMf3nBmsXR8A9IJmPt5KwGqCZaNBHZnVy9lInEJVtKayIecoB54IW4lCSgKl4_dJRUDeyNZ72h_MwNDsnI0Lzim1yLHukHS6dc5f50y_MBa9XmlG0MfDuhw"/>
+</div>
+</div>
+</header>
+<main class="pt-24 pb-32 h-screen flex flex-col">
+<!-- Horizontal Day Selector -->
+<div class="px-container-padding mb-md overflow-x-auto hide-scrollbar flex gap-sm pb-2">
+<div class="flex flex-col items-center justify-center min-w-[64px] h-20 rounded-xl glass-panel text-on-surface-variant hover:border-primary/30 transition-colors">
+<span class="text-label-caps font-label-caps opacity-60">MON</span>
+<span class="text-title-md font-title-md">12</span>
+</div>
+<div class="flex flex-col items-center justify-center min-w-[64px] h-20 rounded-xl bg-primary text-on-primary border border-primary/20 glow-blue">
+<span class="text-label-caps font-label-caps font-bold">TUE</span>
+<span class="text-title-md font-title-md">13</span>
+</div>
+<div class="flex flex-col items-center justify-center min-w-[64px] h-20 rounded-xl glass-panel text-on-surface-variant hover:border-primary/30 transition-colors">
+<span class="text-label-caps font-label-caps opacity-60">WED</span>
+<span class="text-title-md font-title-md">14</span>
+</div>
+<div class="flex flex-col items-center justify-center min-w-[64px] h-20 rounded-xl glass-panel text-on-surface-variant hover:border-primary/30 transition-colors">
+<span class="text-label-caps font-label-caps opacity-60">THU</span>
+<span class="text-title-md font-title-md">15</span>
+</div>
+<div class="flex flex-col items-center justify-center min-w-[64px] h-20 rounded-xl glass-panel text-on-surface-variant hover:border-primary/30 transition-colors">
+<span class="text-label-caps font-label-caps opacity-60">FRI</span>
+<span class="text-title-md font-title-md">16</span>
+</div>
+<div class="flex flex-col items-center justify-center min-w-[64px] h-20 rounded-xl glass-panel text-on-surface-variant hover:border-primary/30 transition-colors">
+<span class="text-label-caps font-label-caps opacity-60">SAT</span>
+<span class="text-title-md font-title-md">17</span>
+</div>
+</div>
+<!-- Vertical Timeline Container -->
+<div class="flex-1 overflow-y-auto hide-scrollbar px-container-padding relative">
+<div class="relative w-full min-h-[1400px]">
+<!-- Time Markers -->
+<div class="absolute left-0 top-0 w-full h-full flex flex-col">
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">08:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">09:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">10:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">11:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">12:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">13:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">14:00</span>
+</div>
+<div class="h-[100px] border-b border-outline-variant/30 flex items-start pt-1">
+<span class="text-[10px] font-bold text-outline uppercase tracking-wider">15:00</span>
+</div>
+</div>
+<!-- Vertical Line -->
+<div class="absolute left-12 top-0 bottom-0 w-px timeline-line z-0"></div>
+<!-- Conflict Area -->
+<div class="absolute left-16 right-0 top-[220px] h-[150px] rounded-r-xl conflict-hatch border-l-4 border-tertiary z-10 flex items-center justify-end pr-4">
+<div class="flex flex-col items-end">
+<span class="bg-tertiary text-on-tertiary px-2 py-0.5 rounded-full text-[10px] font-bold uppercase mb-2">Schedule Conflict</span>
+<button class="bg-primary text-on-primary px-4 py-2 rounded-full flex items-center gap-xs font-label-caps text-label-caps shadow-lg active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+                        Optimize with AI
+                    </button>
+</div>
+</div>
+<!-- Event: PFE Project Meeting -->
+<div class="absolute left-16 right-4 top-[100px] h-[150px] glass-panel rounded-xl border-l-4 border-error glow-red p-md z-20">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-title-md text-on-surface">PFE Project Meeting</h3>
+<p class="text-body-sm text-on-surface-variant flex items-center gap-xs">
+<span class="material-symbols-outlined text-xs" data-icon="schedule">schedule</span>
+                            09:00 - 10:30
+                        </p>
+</div>
+<span class="material-symbols-outlined text-error" data-icon="lock" style="font-variation-settings: 'FILL' 1;">lock</span>
+</div>
+<div class="mt-xs flex items-center gap-xs">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border border-background bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Female software engineer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-VcXY2O15IugrUpun5OmZ3hHSwpTQEIbaqnoNo1KxAoOUeNDLzexfXF8OiRMrz5Ngox3dKmUS4_yhew40zpXD1tbwkc3w7WVegIp8AXR7DAsr-5j97CwEip7x75r8_egfUgITVRUWd-KNQpzuw3fP_NsMpRl_A56dGXV3XxO0hh7QYbqPvEFqILpeosWt7MICS_EuLpy3-p8uYH83EK0DChC44MKaa2j-_J9YV-MzpCw9tv3Ok0ZCkgpuqz62JGpjr1AGEl_n5gc"/>
+</div>
+<div class="w-6 h-6 rounded-full border border-background bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Male product designer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtgncjotL_C-le0YYhYFhujxwm3wRvlIZ6Absu2OZsebTyRjGTW-5mhgzjd_CZ3qcUS2W4hi9H4V3kjMHbv18lo6PE95dJGd0jJ4bCGyICJpdWpgMe1yPUg6ks2YC6pyu0EvzROoN0sK-Hi1ErjXLQFHDvWwCuZEhOp9x4s3sjTnUevwKPgMqAJSbrJHVUycgwFCNjjf6-oBjZl9rONS8XVSkihC7-yFjdii8bRxAlVs2Die70vE_ww_1_DqR6Ttu3KCT9zqqaUzE"/>
+</div>
+</div>
+<span class="text-[10px] text-on-surface-variant opacity-60">+2 others</span>
+</div>
+</div>
+<!-- Event: Gym Session -->
+<div class="absolute left-24 right-8 top-[320px] h-[120px] glass-panel rounded-xl border-l-4 border-secondary glow-green p-md z-30">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-title-md text-on-surface">Gym Session</h3>
+<p class="text-body-sm text-on-surface-variant flex items-center gap-xs">
+<span class="material-symbols-outlined text-xs" data-icon="schedule">schedule</span>
+                            11:15 - 12:30
+                        </p>
+</div>
+<span class="material-symbols-outlined text-secondary opacity-60 cursor-grab" data-icon="drag_indicator">drag_indicator</span>
+</div>
+<div class="mt-xs">
+<span class="text-[10px] bg-secondary-container text-on-secondary-container border border-secondary/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter">Flexible</span>
+</div>
+</div>
+<!-- Other Background Task: Lunch -->
+<div class="absolute left-16 right-4 top-[500px] h-[100px] glass-panel rounded-xl border-l-4 border-primary p-md z-10 opacity-60 grayscale">
+<h3 class="font-title-md text-on-surface">Quick Lunch</h3>
+<p class="text-body-sm text-on-surface-variant">13:00 - 14:00</p>
+</div>
+<!-- Current Time Indicator -->
+<div class="absolute left-0 right-0 top-[280px] z-40 pointer-events-none">
+<div class="flex items-center">
+<div class="w-12 text-right pr-2">
+<span class="text-[10px] font-bold text-primary">10:48</span>
+</div>
+<div class="flex-1 h-px bg-primary/40 relative">
+<div class="absolute -left-1 -top-1 w-2.5 h-2.5 rounded-full bg-primary glow-blue shadow-lg"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl bg-surface-container/90 backdrop-blur-2xl border-t border-outline-variant/30 shadow-[0_-8px_30px_rgb(0,0,0,0.04)] flex justify-around items-center px-lg py-sm pb-8">
+<button class="flex flex-col items-center justify-center text-primary bg-primary-container rounded-full px-4 py-1 active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+<span class="font-label-caps text-label-caps">Assistant</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-caps text-label-caps">Briefing</span>
+</button>
+</nav>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const cards = document.querySelectorAll('.glass-panel');
+        cards.forEach(card => {
+            card.addEventListener('touchstart', () => {
+                card.style.transform = 'scale(0.98)';
+            });
+            card.addEventListener('touchend', () => {
+                card.style.transform = 'scale(1)';
+            });
+        });
+
+        const scrollContainer = document.querySelector('main > div.overflow-y-auto');
+        if (scrollContainer) {
+            scrollContainer.scrollTop = 200;
+        }
+    });
+</script>
+</body></html>

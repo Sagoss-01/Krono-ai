@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Aura AI - Critical Emergency</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#fdf8f8",
+                    "surface-dim": "#ddd9d8",
+                    "surface-bright": "#fdf8f8",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-low": "#f7f3f2",
+                    "surface-container": "#f1edec",
+                    "surface-container-high": "#ebe7e6",
+                    "surface-container-highest": "#e5e2e1",
+                    "on-surface": "#1c1b1b",
+                    "on-surface-variant": "#44474e",
+                    "outline": "#74777f",
+                    "outline-variant": "#c4c6cf",
+                    "primary": "#005ac2",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#d8e2ff",
+                    "on-primary-container": "#001a41",
+                    "secondary": "#00a572",
+                    "on-secondary": "#ffffff",
+                    "secondary-container": "#6ffbbe",
+                    "on-secondary-container": "#002114",
+                    "tertiary": "#8f4c38",
+                    "on-tertiary": "#ffffff",
+                    "tertiary-container": "#ffdbd0",
+                    "on-tertiary-container": "#3a0b01",
+                    "error": "#ba1a1a",
+                    "on-error": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "on-error-container": "#410002",
+                    "background": "#fdf8f8",
+                    "on-background": "#1c1b1b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "4px",
+                    "lg": "8px",
+                    "xl": "12px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-gap": "12px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "sm": "12px",
+                    "base": "4px",
+                    "container-padding": "20px",
+                    "xs": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "title-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-light-red {
+            background: rgba(255, 218, 214, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .pulse-border-light {
+            animation: pulse-glow-light 2s infinite ease-in-out;
+        }
+        @keyframes pulse-glow-light {
+            0%, 100% { border-color: rgba(186, 26, 26, 0.1); box-shadow: 0 0 0px rgba(186, 26, 26, 0); }
+            50% { border-color: rgba(186, 26, 26, 0.3); box-shadow: 0 0 30px rgba(186, 26, 26, 0.15); }
+        }
+        .bg-mesh-alert-light {
+            background-color: #fdf8f8;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(186, 26, 26, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 90, 194, 0.05) 0px, transparent 50%);
+        }
+        body {
+            min-height: max(884px, 100dvh);
+            font-family: 'Hanken Grotesk', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-lg overflow-hidden h-screen w-screen flex flex-col items-center justify-center bg-mesh-alert-light">
+<!-- Top Status Bar (Contextual) -->
+<header class="fixed top-0 w-full flex justify-between items-center px-container-padding py-md z-50">
+<div class="flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary" data-icon="token">token</span>
+<span class="font-display-lg text-title-md tracking-tight text-primary">Aura AI</span>
+</div>
+<div class="bg-error-container text-on-error-container px-sm py-base rounded-full flex items-center gap-xs border border-error/10">
+<span class="material-symbols-outlined text-sm" data-icon="warning" style="font-variation-settings: 'FILL' 1;">warning</span>
+<span class="font-label-caps text-label-caps">Priority Alert</span>
+</div>
+</header>
+<!-- Main Alert Overlay Canvas -->
+<main class="relative z-10 w-full max-w-lg px-container-padding flex flex-col items-center text-center">
+<!-- Animated Background Node -->
+<div class="absolute -top-32 left-1/2 -translate-x-1/2 w-64 h-64 bg-error-container/40 blur-[100px] rounded-full"></div>
+<!-- Emergency Badge -->
+<div class="mb-lg animate-bounce">
+<div class="inline-flex items-center gap-xs bg-error text-on-error font-label-caps text-label-caps px-md py-sm rounded-full shadow-lg">
+<span class="material-symbols-outlined" data-icon="notification_important" style="font-variation-settings: 'FILL' 1;">notification_important</span>
+                CRITICAL EMERGENCY
+            </div>
+</div>
+<!-- Headline Message -->
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile md:font-headline-lg md:text-headline-lg text-on-background mb-md tracking-tight">
+            Conflict Detected: Your <span class="text-error font-bold">2 PM meeting</span> overlaps with <span class="text-primary font-bold">mandatory travel time.</span>
+</h1>
+<!-- Context Detail Card -->
+<div class="glass-light-red w-full rounded-xl border border-error/10 p-lg mb-xl relative overflow-hidden pulse-border-light">
+<div class="flex items-center justify-between mb-md">
+<div class="flex items-center gap-sm">
+<div class="w-1 h-8 bg-error rounded-full"></div>
+<div class="text-left">
+<p class="font-label-caps text-label-caps text-on-surface-variant">Conflicting Event</p>
+<p class="font-title-md text-on-surface">Client Q3 Review</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-md text-on-surface">14:00 - 15:00</p>
+<p class="font-body-sm text-on-surface-variant">Downtown Office</p>
+</div>
+</div>
+<div class="flex items-center justify-center gap-md py-sm border-y border-outline-variant/30 mb-md">
+<span class="material-symbols-outlined text-tertiary" data-icon="arrow_downward">arrow_downward</span>
+<p class="font-body-sm text-tertiary font-semibold">35 min drive required before 14:00</p>
+</div>
+<div class="flex items-center gap-sm bg-secondary-container/20 p-sm rounded-lg border border-secondary/20">
+<span class="material-symbols-outlined text-secondary" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<p class="font-body-sm text-on-surface text-left">
+<span class="font-bold text-secondary">Aura Strategy:</span> Moving your Gym session from 13:00 to 18:00 clears the travel window perfectly.
+                </p>
+</div>
+</div>
+<!-- Action Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md w-full">
+<!-- AI Solution Button -->
+<button class="group relative flex items-center justify-center gap-sm bg-secondary text-on-secondary font-title-md px-lg py-md rounded-xl transition-all duration-300 active:scale-95 shadow-md hover:shadow-lg overflow-hidden">
+<div class="absolute inset-0 bg-black/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+<span class="material-symbols-outlined" data-icon="task_alt">task_alt</span>
+<span class="relative z-10">Apply AI Solution</span>
+</button>
+<!-- Ignore Button -->
+<button class="flex items-center justify-center gap-sm bg-surface-container-high text-on-surface-variant font-body-lg px-lg py-md rounded-xl border border-outline-variant hover:bg-surface-container-highest transition-colors active:scale-95">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+                Ignore Conflict
+            </button>
+</div>
+<p class="mt-xl font-body-sm text-on-surface-variant/80 flex items-center gap-xs justify-center">
+<span class="material-symbols-outlined text-xs" data-icon="history">history</span>
+            This action will update 2 calendar items
+        </p>
+</main>
+<!-- Visual Embellishment: Background Shader -->
+<div class="fixed inset-0 pointer-events-none -z-10 opacity-10"></div>
+<!-- Micro-interaction Script -->
+<script>
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                const icon = btn.querySelector('.material-symbols-outlined');
+                if(icon) icon.classList.add('scale-110');
+            });
+            btn.addEventListener('mouseleave', () => {
+                const icon = btn.querySelector('.material-symbols-outlined');
+                if(icon) icon.classList.remove('scale-110');
+            });
+        });
+    </script>
+</body></html>

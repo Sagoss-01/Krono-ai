@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Aide — TechSphere Webmail</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="/css/mail.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    body { background: var(--bg-base); color: var(--text-1); font-family: 'Sora', sans-serif; margin: 0; }
+    .help-page { max-width: 760px; margin: 0 auto; padding: 40px 24px 80px; }
+    .help-back { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted);
+      text-decoration: none; font-size: 13px; margin-bottom: 32px;
+      padding: 6px 12px; border-radius: 8px; background: var(--bg-card);
+      border: 1px solid var(--border); transition: color .15s; }
+    .help-back:hover { color: var(--accent); border-color: var(--accent); }
+    .help-hero { margin-bottom: 40px; }
+    .help-hero h1 { font-size: 28px; font-weight: 800; margin: 0 0 8px; }
+    .help-hero p  { color: var(--text-muted); font-size: 14px; margin: 0; }
+    .help-section { margin-bottom: 36px; }
+    .help-section h2 {
+      font-size: 15px; font-weight: 700; margin: 0 0 14px;
+      display: flex; align-items: center; gap: 8px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    .shortcut-grid {
+      display: grid; grid-template-columns: auto 1fr;
+      gap: 10px 20px; align-items: center;
+    }
+    kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--bg-hover); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 10px;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      color: var(--text-1); font-weight: 700; white-space: nowrap;
+      box-shadow: 0 2px 0 var(--border); min-width: 36px;
+      justify-content: center;
+    }
+    .shortcut-desc { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+    .shortcut-desc strong { color: var(--text-1); }
+    .tip-box {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent); border-radius: 8px;
+      padding: 12px 16px; font-size: 13px; color: var(--text-muted);
+      margin-top: 8px; line-height: 1.6;
+    }
+    .tip-box strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="help-page">
+    <a href="/mail" class="help-back">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Retour à la messagerie
+    </a>
+
+    <div class="help-hero">
+      <h1>⌨️ Raccourcis clavier</h1>
+      <p>Utilisez ces raccourcis pour naviguer rapidement dans TechSphere Webmail.</p>
+    </div>
+
+    <div class="tip-box">
+      <strong>Astuce :</strong> Appuyez sur <kbd style="display:inline-flex;padding:2px 6px;">?</kbd> depuis n'importe où dans l'application pour ouvrir ce guide directement.
+    </div>
+
+    <!-- MESSAGERIE -->
+    <div class="help-section" style="margin-top:32px;">
+      <h2>📧 Messagerie</h2>
+      <div class="shortcut-grid">
+        <kbd>R</kbd>
+        <div class="shortcut-desc"><strong>Répondre</strong> à l'email actuellement ouvert</div>
+
+        <kbd>F</kbd>
+        <div class="shortcut-desc"><strong>Transférer</strong> l'email actuellement ouvert</div>
+
+        <kbd>D</kbd>
+        <div class="shortcut-desc"><strong>Supprimer</strong> l'email actuellement ouvert — une confirmation apparaîtra</div>
+
+        <kbd>U</kbd>
+        <div class="shortcut-desc"><strong>Marquer lu / non-lu</strong> — bascule l'état de l'email sélectionné</div>
+
+        <kbd>S</kbd>
+        <div class="shortcut-desc"><strong>Étoiler / retirer l'étoile</strong> — ajoute ou retire l'email des favoris</div>
+
+        <kbd>/</kbd>
+        <div class="shortcut-desc"><strong>Rechercher</strong> — place le curseur dans la barre de recherche</div>
+
+        <kbd>Esc</kbd>
+        <div class="shortcut-desc"><strong>Fermer</strong> la vue email (utile sur mobile)</div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="help-section">
+      <h2>💬 Discussions (Chat)</h2>
+      <div class="shortcut-grid">
+        <kbd>Enter</kbd>
+        <div class="shortcut-desc"><strong>Envoyer</strong> le message en cours de rédaction</div>
+
+        <kbd>Shift <span style="font-size:10px;margin:0 2px;">+</span> Enter</kbd>
+        <div class="shortcut-desc"><strong>Nouvelle ligne</strong> dans le message sans l'envoyer</div>
+      </div>
+    </div>
+
+    <!-- NAVIGATION -->
+    <div class="help-section">
+      <h2>🧭 Navigation générale</h2>
+      <div class="shortcut-grid">
+        <kbd>?</kbd>
+        <div class="shortcut-desc"><strong>Ouvrir / fermer</strong> ce guide de raccourcis</div>
+
+        <kbd>Esc</kbd>
+        <div class="shortcut-desc"><strong>Fermer</strong> les modales, popups et panneaux ouverts</div>
+      </div>
+    </div>
+
+    <!-- FILTRES SIDEBAR -->
+    <div class="help-section">
+      <h2>🗂️ Filtres rapides (sidebar)</h2>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Dans la sidebar, cliquez sur la flèche à droite de <strong>Boîte de réception</strong> pour déplie les sous-sections :
+      </p>
+      <div class="shortcut-grid">
+        <kbd style="font-size:10px;">Non lus</kbd>
+        <div class="shortcut-desc">Affiche uniquement les emails <strong>non lus</strong></div>
+
+        <kbd style="font-size:10px;">Étoilés</kbd>
+        <div class="shortcut-desc">Affiche uniquement les emails <strong>marqués en favoris</strong></div>
+
+        <kbd style="font-size:10px;">Pièces jointes</kbd>
+        <div class="shortcut-desc">Affiche uniquement les emails avec <strong>pièces jointes</strong></div>
+      </div>
+    </div>
+
+    <div class="tip-box">
+      <strong>Conseil :</strong> Les raccourcis clavier ne fonctionnent pas quand le curseur est positionné dans un champ texte (zone de recherche, composition d'email, zone de message chat).
+    </div>
+  </div>
+</body>
+</html>

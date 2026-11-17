@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title><%= title || 'Erreur' %> — TechSphere</title>
+  <link rel="icon" href="/favicon.ico"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;font-family:'Sora',sans-serif;}
+    body{
+      background:#060d1a;color:#f1f5f9;
+      min-height:100vh;display:flex;align-items:center;justify-content:center;
+      padding:24px;
+      background-image:
+        radial-gradient(ellipse 60% 50% at 10% 20%, rgba(3,92,128,0.12) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 90% 80%, rgba(139,92,246,0.07) 0%, transparent 60%);
+    }
+    .card{
+      max-width:440px;width:100%;
+      background:#0c1526;border:1px solid rgba(3,92,128,0.15);
+      border-radius:20px;padding:40px 36px;text-align:center;
+      box-shadow:0 32px 80px rgba(0,0,0,0.5);
+    }
+    .icon-wrap{
+      width:72px;height:72px;border-radius:20px;margin:0 auto 24px;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .icon-wrap.red   {background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.2);}
+    .icon-wrap.yellow{background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.2);}
+    .icon-wrap.blue  {background:rgba(3,92,128,0.12);border:1px solid rgba(3,92,128,0.2);}
+    h1{font-size:22px;font-weight:800;color:#f1f5f9;margin-bottom:10px;}
+    p {font-size:14px;color:#64748b;line-height:1.7;margin-bottom:28px;}
+    .btn-home{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:12px 24px;border-radius:11px;border:none;cursor:pointer;
+      background:linear-gradient(135deg,#035c80,#024a6a);
+      color:white;font-size:14px;font-weight:700;text-decoration:none;
+      box-shadow:0 6px 20px rgba(3,92,128,0.3);transition:all .2s;
+    }
+    .btn-home:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(3,92,128,0.4);}
+    .btn-back{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:10px 18px;border-radius:10px;border:1px solid rgba(3,92,128,0.2);
+      background:transparent;color:#94a3b8;font-size:13px;font-weight:600;
+      text-decoration:none;margin-right:10px;transition:all .2s;
+    }
+    .btn-back:hover{background:rgba(3,92,128,0.08);color:#4db8d8;}
+    .logo{
+      display:flex;align-items:center;justify-content:center;gap:10px;
+      margin-bottom:32px;text-decoration:none;
+    }
+    .logo-ico{
+      width:36px;height:36px;border-radius:10px;
+      background:linear-gradient(135deg,#035c80,#8b5cf6);
+      display:flex;align-items:center;justify-content:center;
+    }
+    .logo-name{font-size:16px;font-weight:800;color:#f1f5f9;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <a href="/" class="logo">
+      <div class="logo-ico">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+      </div>
+      <span class="logo-name">TechSphere</span>
+    </a>
+
+    <%
+      // Choisir l'icône selon le type d'erreur
+      const isEnded   = (title || '').toLowerCase().includes('termin');
+      const isDenied  = (title || '').toLowerCase().includes('refus') || (title || '').toLowerCase().includes('acces');
+      const iconColor = isEnded ? 'yellow' : isDenied ? 'red' : 'blue';
+    %>
+
+    <div class="icon-wrap <%= iconColor %>">
+      <% if (isEnded) { %>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <% } else if (isDenied) { %>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+      <% } else { %>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4db8d8" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      <% } %>
+    </div>
+
+    <h1><%= title || 'Erreur' %></h1>
+    <p><%= message || 'Une erreur inattendue s\'est produite.' %></p>
+
+    <div>
+      <a href="javascript:history.back()" class="btn-back">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        Retour
+      </a>
+      <a href="/mail" class="btn-home">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Aller à la messagerie
+      </a>
+    </div>
+  </div>
+</body>
+</html>

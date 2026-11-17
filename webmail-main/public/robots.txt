@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /api/
+Disallow: /mail
+Disallow: /login
+Disallow: /register
+Disallow: /meeting
+Disallow: /discussion
+Disallow: /settings
+Disallow: /admin
+
+Sitemap: https://webmail.netiify.cloud/sitemap.xml

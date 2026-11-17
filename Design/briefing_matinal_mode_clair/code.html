@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#eee8e7",
+                    "on-error": "#ffffff",
+                    "surface-container-high": "#ebe7e6",
+                    "secondary": "#306b4c",
+                    "background": "#fdf8f8",
+                    "surface-tint": "#005ac2",
+                    "surface": "#fdf8f8",
+                    "secondary-container": "#b2f2ca",
+                    "surface-container": "#f1edec",
+                    "on-tertiary-fixed-variant": "#783200",
+                    "primary-fixed": "#d8e2ff",
+                    "error": "#ba1a1a",
+                    "on-error-container": "#410002",
+                    "primary-fixed-dim": "#adc6ff",
+                    "tertiary-fixed-dim": "#ffb690",
+                    "on-primary-fixed-variant": "#004395",
+                    "on-surface-variant": "#44474e",
+                    "inverse-surface": "#313030",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed": "#002113",
+                    "on-surface": "#1c1b1b",
+                    "outline-variant": "#c4c6d0",
+                    "surface-container-lowest": "#ffffff",
+                    "secondary-fixed-dim": "#4edea3",
+                    "on-tertiary-container": "#4a1c00",
+                    "surface-dim": "#ddd9d8",
+                    "error-container": "#ffdad6",
+                    "on-primary-fixed": "#001a42",
+                    "primary-container": "#d8e2ff",
+                    "surface-bright": "#fdf8f8",
+                    "secondary-fixed": "#6ffbbe",
+                    "inverse-on-surface": "#f4f0ef",
+                    "on-secondary": "#ffffff",
+                    "inverse-primary": "#adc6ff",
+                    "on-background": "#1c1b1b",
+                    "primary": "#005ac2",
+                    "tertiary-fixed": "#ffdbca",
+                    "on-tertiary-fixed": "#341100",
+                    "outline": "#74777f",
+                    "on-secondary-container": "#002113",
+                    "on-primary-container": "#001a42",
+                    "tertiary-container": "#ffdbca",
+                    "surface-container-highest": "#e5e2e1",
+                    "on-primary": "#ffffff",
+                    "surface-container-low": "#f7f3f2",
+                    "on-secondary-fixed-variant": "#005236"
+            },
+            "borderRadius": {
+                    "DEFAULT": "4px",
+                    "lg": "8px",
+                    "xl": "12px",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-gap": "12px",
+                    "lg": "24px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "sm": "12px",
+                    "base": "4px",
+                    "container-padding": "20px",
+                    "xs": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "title-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #fdf8f8;
+            color: #1c1b1b;
+            font-family: 'Hanken Grotesk', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .glass-card {
+            background: #ffffff;
+            border: 1px solid rgba(196, 198, 208, 0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .neon-glow-primary {
+            box-shadow: 0 0 15px rgba(0, 90, 194, 0.08);
+        }
+
+        .neon-border-secondary {
+            border-left: 4px solid #306b4c;
+        }
+
+        .audio-wave-container {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 24px;
+        }
+
+        .wave-bar {
+            width: 3px;
+            background: #005ac2;
+            border-radius: 2px;
+            animation: wave 1.2s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { height: 4px; }
+            50% { height: 20px; }
+        }
+
+        .drop-zone-active {
+            border-color: #306b4c;
+            background: rgba(48, 107, 76, 0.04);
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl border-b border-outline-variant/30 flex justify-between items-center px-container-padding py-md">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional close-up studio portrait of a young person with soft, cinematic lighting against a dark, moody background. The image has a clean, high-fidelity aesthetic with deep charcoal tones and subtle teal highlights, matching a premium AI assistant interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBp99i5dfSaG4cu7M0r_uLMz7EYVcV9LwrmcLfOQcKsV0956uCUnVgywNqXyh2qgLx2D3kPdmzBym3G6IZnrD4F4LRDDIW0opByQ4AK80q2v8fxSv5Z2Fnoi0iw-nANeIPBIVKYwvvHm-VrwkoDqtbp2whAHKD-0Ba5zZXisZed7_M7kKKMn0CW_okYem2WpJeJsnrYvUTBXcHy5tzIo2709aH4THHQbRvhcnsIcm886c-sCuDBg5Xh_ku0YL34-WrbOi37Dgjk9Ms"/>
+</div>
+<h1 class="font-display-lg text-title-md text-primary font-bold">Aura AI</h1>
+</div>
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<main class="flex-1 mt-24 mb-32 px-container-padding max-w-4xl mx-auto w-full">
+<!-- Morning Greeting Section -->
+<section class="mb-xl">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-xs">Good Morning, Alex</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Your day is optimized. Here is your 2-minute briefing.</p>
+</section>
+<!-- Daily Briefing Audio Player -->
+<div class="glass-card rounded-xl p-md mb-xl flex flex-col gap-md relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+<span class="material-symbols-outlined text-[64px]" style="font-variation-settings: 'FILL' 1;">graphic_eq</span>
+</div>
+<div class="flex items-center justify-between z-10">
+<div class="flex items-center gap-sm">
+<div class="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary neon-glow-primary cursor-pointer">
+<span class="material-symbols-outlined" id="playIcon" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<div>
+<p class="font-title-md text-title-md text-primary">Daily Pulse</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Today's Schedule &amp; Goal Alignment</p>
+</div>
+</div>
+<div class="audio-wave-container px-md">
+<div class="wave-bar" style="animation-delay: 0.1s"></div>
+<div class="wave-bar" style="animation-delay: 0.3s"></div>
+<div class="wave-bar" style="animation-delay: 0.5s"></div>
+<div class="wave-bar" style="animation-delay: 0.2s"></div>
+<div class="wave-bar" style="animation-delay: 0.4s"></div>
+</div>
+</div>
+<div class="w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full w-1/3 rounded-full"></div>
+</div>
+<div class="flex justify-between font-label-caps text-label-caps text-on-surface-variant/70">
+<span>0:45</span>
+<span>2:15</span>
+</div>
+</div>
+<!-- Document Import Hub -->
+<section>
+<div class="mb-md">
+<h3 class="font-title-md text-title-md text-on-surface">Import Documents</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Planning exams or medical visits? Aura will extract dates and prep your schedule.</p>
+</div>
+<!-- Drag & Drop Area -->
+<div class="glass-card border-2 border-dashed border-outline-variant/50 rounded-xl p-xl flex flex-col items-center justify-center text-center transition-all duration-300 hover:border-secondary hover:bg-secondary/[0.02] group cursor-pointer" id="dropZone">
+<div class="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center text-secondary mb-md group-hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[32px]">attach_file</span>
+</div>
+<h4 class="font-title-md text-title-md text-on-surface mb-xs">Drop documents here</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xs">PDF or Images supported. AI will automatically plan your prep or follow-ups.</p>
+<input accept="image/*,.pdf" class="hidden" id="fileInput" multiple="" type="file"/>
+<button class="mt-lg px-xl py-md bg-secondary text-on-secondary rounded-lg font-label-caps text-label-caps shadow-sm hover:brightness-110 transition-all active:scale-95" onclick="document.getElementById('fileInput').click()">
+                    Select Files
+                </button>
+</div>
+<!-- Recent Imports Grid (Bento) -->
+<div class="grid grid-cols-2 gap-md mt-xl">
+<div class="glass-card rounded-xl p-md neon-border-secondary">
+<div class="flex justify-between items-start mb-sm">
+<span class="material-symbols-outlined text-secondary">description</span>
+<span class="font-label-caps text-[10px] text-secondary bg-secondary/10 px-xs py-0.5 rounded-full">PROCESSED</span>
+</div>
+<p class="font-title-md text-[14px] text-on-surface truncate">Calculus_Exam_Syllabus.pdf</p>
+<p class="font-body-sm text-[12px] text-on-surface-variant mt-1">3 Study sessions added</p>
+</div>
+<div class="glass-card rounded-xl p-md border-l-4 border-tertiary-container">
+<div class="flex justify-between items-start mb-sm">
+<span class="material-symbols-outlined text-tertiary-container" style="color: #bc6200;">medical_services</span>
+<span class="font-label-caps text-[10px] text-on-tertiary-container bg-tertiary-container px-xs py-0.5 rounded-full" style="background-color: #ffdbca; color: #783200;">CONFLICT</span>
+</div>
+<p class="font-title-md text-[14px] text-on-surface truncate">Dentist_Appointment.jpg</p>
+<p class="font-body-sm text-[12px] text-on-surface-variant mt-1">Found 1 scheduling clash</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl bg-surface-container-lowest/90 backdrop-blur-2xl border-t border-outline-variant/30 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] flex justify-around items-center px-lg py-sm pb-8">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-[10px]">Dashboard</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">auto_awesome</span>
+<span class="font-label-caps text-[10px]">Assistant</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary bg-secondary-container/30 rounded-lg px-4 py-1 active:scale-90 duration-200 cursor-pointer">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-caps text-[10px]">Briefing</span>
+</div>
+</nav>
+<script>
+        // Simple micro-interaction for the drop zone
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drop-zone-active');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drop-zone-active');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        });
+
+        function handleFiles(files) {
+            console.log('Files received:', files);
+            alert('Aura is analyzing your ' + files.length + ' documents...');
+        }
+
+        // Toggle play icon state
+        const playBtn = document.getElementById('playIcon');
+        let isPlaying = false;
+        playBtn.parentElement.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playBtn.textContent = isPlaying ? 'pause' : 'play_arrow';
+            
+            const bars = document.querySelectorAll('.wave-bar');
+            bars.forEach(bar => {
+                bar.style.animationPlayState = isPlaying ? 'running' : 'paused';
+            });
+        });
+        
+        document.querySelectorAll('.wave-bar').forEach(bar => bar.style.animationPlayState = 'paused');
+    </script>
+</body></html>

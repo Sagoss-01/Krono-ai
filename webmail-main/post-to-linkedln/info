@@ -1,0 +1,42 @@
+j’ai introduit le rôle Catalyst
+seul l’hôte peut attribuer ou retirer ce rôle
+un Catalyst reçoit les mêmes outils live que l’hôte pour :
+sondages
+popcorn
+live quiz
+gestion de salle d’attente
+quand le rôle est attribué :
+le Catalyst concerné est notifié
+l’hôte est aussi notifié
+un petit son premium est joué
+UI Catalyst
+bouton ✦ sur les tuiles participant côté hôte
+clic = attribuer / retirer le rôle Catalyst
+le badge du participant est mis à jour en · Catalyst
+adaptation du front
+les contrôles de sondage utilisent maintenant les droits réels hôte || Catalyst
+popcorn / quiz aussi
+salle d’attente aussi
+
+
+
+
+a appeler dans la console pour diagnosticer
+
+startAudioDiagnosticsLoop();
+
+Pour éviter les soucis de sécurité, le mieux est :
+
+Node.js ne touche pas directement au système
+Node appelle un petit service interne de provisioning ou un script root très limité
+ce script fait uniquement :
+création du mailbox
+hash du mot de passe
+insertion backend mail
+création Maildir
+permissions
+
+Comme ça, tu évites de faire tourner toute ton app Node avec trop de privilèges.
+
+Maître Mémoire n’est pas une simple salle de réunion.
+C’est un espace d’encadrement intelligent qui permet au maître mémoire de suivre, corriger, versionner, orienter et évaluer le travail de l’étudiant jusqu’à la soutenance.

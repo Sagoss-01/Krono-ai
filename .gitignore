@@ -1,0 +1,30 @@
+# --- Secrets : jamais versionnés (utiliser .env.example comme modèle) ---
+.env
+.env.*
+!.env.example
+
+# --- Environnements et dépendances ---
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- Données locales (SQLite, comptes, fichiers programmés) ---
+*.db
+*.sqlite
+data/
+storage/
+
+# --- Builds et sorties ---
+front/dist/
+*.log
+
+# --- Éditeur ---
+.vscode/
+.idea/
+
+# --- Archives de sauvegarde (volumineuses) ---
+*.zip
+webmail-main/version/

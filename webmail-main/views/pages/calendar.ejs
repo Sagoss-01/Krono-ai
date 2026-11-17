@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title><%= title %></title>
+  <meta name="csrf-token" content="<%= csrfToken || '' %>">
+  <link rel="stylesheet" href="/css/style.css"/>
+  <link rel="stylesheet" href="/css/mail.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    body { background: var(--bg-base, var(--bg-main)); color: var(--text-1); font-family: 'Sora', sans-serif; margin: 0; }
+    .cal-page { max-width: 1100px; margin: 0 auto; padding: 28px 24px 80px; }
+    .cal-back { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted);
+      text-decoration: none; font-size: 13px; margin-bottom: 24px;
+      padding: 6px 12px; border-radius: 8px; background: var(--bg-card);
+      border: 1px solid var(--border); }
+    .cal-back:hover { color: var(--accent); border-color: var(--accent); }
+    .cal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .cal-header h1 { font-size: 24px; font-weight: 800; margin: 0; }
+    .cal-nav { display: flex; align-items: center; gap: 10px; }
+    .cal-nav button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card);
+      color: var(--text-1); cursor: pointer; font-size: 15px; }
+    .cal-month-label { font-size: 15px; font-weight: 700; min-width: 160px; text-align: center; text-transform: capitalize; }
+    .cal-btn { padding: 10px 18px; border-radius: 10px; border: none; cursor: pointer; font-size: 13px; font-weight: 700;
+      font-family: 'Sora', sans-serif; background: linear-gradient(135deg, var(--accent), #8b5cf6); color: #fff; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cal-dow { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 6px 0; }
+    .cal-cell { min-height: 92px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card);
+      padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+    .cal-cell.other-month { opacity: .35; }
+    .cal-cell.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+    .cal-daynum { font-size: 11px; font-weight: 700; color: var(--text-2); }
+    .cal-evt { font-size: 10px; padding: 2px 5px; border-radius: 5px; background: rgba(3,92,128,.25); color: #7dd3fc;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cal-evt.meeting { background: rgba(139,92,246,.25); color: #c4b5fd; }
+    .cal-evt-more { font-size: 9px; color: var(--text-muted); }
+
+    .cal-modal { position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; padding: 20px; }
+    .cal-modal.open { display: flex; }
+    .cal-modal-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 16px; width: 460px; max-width: 100%;
+      max-height: 88vh; overflow-y: auto; padding: 24px; }
+    .cal-modal-card h3 { margin: 0 0 16px; font-size: 16px; }
+    .cal-field { margin-bottom: 12px; }
+    .cal-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; }
+    .cal-field input, .cal-field textarea { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text-1); font-size: 13px; font-family: 'Sora', sans-serif; outline: none; box-sizing: border-box; }
+    .cal-row2 { display: flex; gap: 10px; }
+    .cal-row2 > div { flex: 1; }
+    .cal-toggle { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+      background: rgba(139,92,246,.06); cursor: pointer; margin-bottom: 12px; }
+    .cal-modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .cal-modal-actions button { flex: 1; padding: 10px; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Sora', sans-serif; }
+    .cal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-2); }
+    .cal-save { background: linear-gradient(135deg, var(--accent), #8b5cf6); border: none; color: #fff; }
+    .cal-delete-link { text-align: center; margin-top: 10px; font-size: 12px; color: #f87171; cursor: pointer; }
+
+    /* Détail du jour (liste des événements) */
+    .cal-day-list { margin-top: 24px; }
+    .cal-day-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px;
+      background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 8px; }
+    .cal-day-item .time { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 46px; }
+    .cal-day-item .title { font-size: 13px; font-weight: 600; flex: 1; }
+    .cal-day-item .meta { font-size: 11px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="cal-page">
+    <a href="/mail" class="cal-back">← Retour au webmail</a>
+
+    <div class="cal-header">
+      <h1>📅 Calendrier</h1>
+      <div class="cal-nav">
+        <button onclick="Cal.prevMonth()">‹</button>
+        <div class="cal-month-label" id="cal-month-label"></div>
+        <button onclick="Cal.nextMonth()">›</button>
+      </div>
+      <button class="cal-btn" onclick="Cal.openNew()">+ Nouvel événement</button>
+    </div>
+
+    <div class="cal-grid" id="cal-dow"></div>
+    <div class="cal-grid" id="cal-grid" style="margin-top:6px;"></div>
+
+    <div class="cal-day-list" id="cal-day-list" style="display:none;">
+      <h3 id="cal-day-title" style="font-size:14px;margin-bottom:10px;"></h3>
+      <div id="cal-day-items"></div>
+    </div>
+  </div>
+
+  <!-- Modal création/édition -->
+  <div class="cal-modal" id="cal-modal">
+    <div class="cal-modal-card">
+      <h3 id="cal-modal-title">Nouvel événement</h3>
+      <input type="hidden" id="cal-id" />
+
+      <label class="cal-toggle">
+        <input type="checkbox" id="cal-is-meeting" onchange="Cal.onMeetingToggle()" />
+        <div>
+          <div style="font-size:12px;font-weight:700;">🎥 C'est une réunion</div>
+          <div style="font-size:10px;color:var(--text-muted);">Crée aussi un lien de visioconférence et l'envoie aux invités</div>
+        </div>
+      </label>
+
+      <div class="cal-field"><label>Titre *</label><input type="text" id="cal-title" placeholder="Ex: Point d'équipe" /></div>
+
+      <div class="cal-row2">
+        <div class="cal-field"><label>Début *</label><input type="datetime-local" id="cal-start" /></div>
+        <div class="cal-field"><label>Fin *</label><input type="datetime-local" id="cal-end" /></div>
+      </div>
+
+      <div class="cal-field" id="cal-location-field"><label>Lieu</label><input type="text" id="cal-location" placeholder="Optionnel" /></div>
+      <div class="cal-field"><label>Description</label><textarea id="cal-description" rows="2"></textarea></div>
+      <div class="cal-field"><label>Invités (emails séparés par virgule)</label><input type="text" id="cal-attendees" placeholder="alice@ex.com, bob@ex.com" /></div>
+      <div class="cal-field"><label>Rappel</label>
+        <select id="cal-reminder" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-1);font-size:13px;font-family:'Sora',sans-serif;">
+          <option value="">Aucun</option>
+          <option value="10" selected>10 minutes avant</option>
+          <option value="30">30 minutes avant</option>
+          <option value="60">1 heure avant</option>
+          <option value="1440">1 jour avant</option>
+        </select>
+      </div>
+
+      <div id="cal-modal-err" style="font-size:12px;color:#f87171;min-height:16px;"></div>
+      <div class="cal-modal-actions">
+        <button class="cal-cancel" onclick="Cal.closeModal()">Annuler</button>
+        <button class="cal-save" onclick="Cal.save()">Enregistrer</button>
+      </div>
+      <div class="cal-delete-link" id="cal-delete-link" style="display:none;" onclick="Cal.removeCurrent()">Supprimer cet événement</div>
+    </div>
+  </div>
+
+  <script src="/js/calendar.js"></script>
+</body>
+</html>

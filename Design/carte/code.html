@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Krono AI - Day Map</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Inter:wght@400;500&amp;family=Geist:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed": "#e6e1df",
+                    "surface-tint": "#5f5e5e",
+                    "surface-container-highest": "#e5e2e1",
+                    "on-secondary": "#ffffff",
+                    "surface-variant": "#e5e2e1",
+                    "secondary-fixed-dim": "#b3c5ff",
+                    "surface-container-low": "#f7f3f2",
+                    "surface": "#fdf8f8",
+                    "inverse-on-surface": "#f4f0ef",
+                    "surface-dim": "#ddd9d8",
+                    "on-primary-fixed-variant": "#474646",
+                    "error": "#ba1a1a",
+                    "error-container": "#ffdad6",
+                    "on-error": "#ffffff",
+                    "surface-bright": "#fdf8f8",
+                    "inverse-primary": "#c8c6c5",
+                    "primary-container": "#1c1b1b",
+                    "on-secondary-container": "#f9f7ff",
+                    "tertiary": "#000000",
+                    "secondary": "#0050cc",
+                    "on-tertiary-fixed-variant": "#484645",
+                    "outline-variant": "#c4c7c7",
+                    "on-secondary-fixed": "#001849",
+                    "on-surface-variant": "#444748",
+                    "primary": "#000000",
+                    "tertiary-fixed-dim": "#cac6c3",
+                    "surface-container": "#f1edec",
+                    "on-error-container": "#93000a",
+                    "secondary-container": "#0266ff",
+                    "on-secondary-fixed-variant": "#003fa4",
+                    "inverse-surface": "#313030",
+                    "primary-fixed": "#e5e2e1",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-container": "#858383",
+                    "secondary-fixed": "#dae1ff",
+                    "primary-fixed-dim": "#c8c6c5",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#ebe7e6",
+                    "outline": "#747878",
+                    "on-primary-fixed": "#1c1b1b",
+                    "on-tertiary-container": "#868381",
+                    "tertiary-container": "#1c1b1a",
+                    "on-surface": "#1c1b1b",
+                    "background": "#fdf8f8"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "unit": "4px",
+                    "container-max": "1280px",
+                    "margin": "32px",
+                    "sm": "8px",
+                    "xl": "40px",
+                    "xs": "4px",
+                    "gutter": "24px",
+                    "md": "16px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "body-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-sm": ["Geist"],
+                    "title-md": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "title-md": ["20px", {"lineHeight": "1.4", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #fdf8f8; overflow-x: hidden; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        
+        /* Artistic Map Canvas */
+        .map-grid {
+            background-image: 
+                radial-gradient(circle at 2px 2px, #e5e2e1 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+
+        .path-line {
+            stroke-dasharray: 8;
+            animation: dash 30s linear infinite;
+        }
+
+        @keyframes dash {
+            to { stroke-dashoffset: -1000; }
+        }
+
+        .ai-pulse {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.6; filter: blur(4px); }
+            50% { opacity: 1; filter: blur(8px); }
+        }
+
+        .floating-card {
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid #E5E5E5;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface-dim flex justify-between items-center px-lg py-md w-full sticky top-0 z-50 border-b border-outline-variant dark:border-outline">
+<div class="flex items-center gap-md">
+<button class="material-symbols-outlined text-primary transition-colors duration-200 ease-in-out hover:bg-surface-container-high p-xs rounded-full">menu</button>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary dark:text-primary-fixed">Krono AI</h1>
+</div>
+<div class="flex items-center gap-md">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest hidden md:block">Geolocalisation</span>
+<button class="material-symbols-outlined text-primary transition-colors duration-200 ease-in-out hover:bg-surface-container-high p-xs rounded-full">account_circle</button>
+</div>
+</header>
+<main class="relative h-[calc(100vh-140px)] w-full overflow-hidden flex flex-col items-center">
+<!-- Abstract Artistic Map Canvas -->
+<div class="absolute inset-0 map-grid z-0 opacity-50"></div>
+<!-- Animated Background Shader (AI Layer) -->
+
+<!-- The Map Layout -->
+<div class="relative w-full h-full max-w-container-max mx-auto px-lg py-xl z-10">
+<svg class="absolute inset-0 w-full h-full pointer-events-none" fill="none" viewbox="0 0 1000 800" xmlns="http://www.w3.org/2000/svg">
+<!-- Artistic path line -->
+<path class="path-line" d="M150 600 Q 200 450, 450 400 T 800 200" fill="none" stroke="#0266ff" stroke-linecap="round" stroke-width="3"></path>
+<path class="ai-pulse" d="M150 600 Q 200 450, 450 400 T 800 200" fill="none" stroke="#0266ff" stroke-opacity="0.1" stroke-width="12"></path>
+</svg>
+<!-- Location Markers (Manual Positioning for Artistic Layout) -->
+<!-- Home -->
+<div class="absolute bottom-[20%] left-[10%] group">
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm bg-surface-container px-sm py-xs rounded mb-xs border border-outline-variant shadow-sm transition-transform group-hover:-translate-y-1">08:30 AM</span>
+<div class="w-12 h-12 bg-surface border-2 border-primary rounded-xl flex items-center justify-center shadow-lg transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+<span class="font-title-md text-title-md mt-sm">Home Base</span>
+</div>
+</div>
+<!-- Office -->
+<div class="absolute top-[45%] left-[40%] group">
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm bg-surface-container px-sm py-xs rounded mb-xs border border-outline-variant shadow-sm transition-transform group-hover:-translate-y-1">09:15 AM</span>
+<div class="w-12 h-12 bg-secondary-container border-2 border-secondary rounded-xl flex items-center justify-center shadow-lg transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">corporate_fare</span>
+</div>
+<span class="font-title-md text-title-md mt-sm">HQ Office</span>
+</div>
+</div>
+<!-- Gym (Functional Accent) -->
+<div class="absolute top-[20%] right-[15%] group">
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm bg-surface-container px-sm py-xs rounded mb-xs border border-outline-variant shadow-sm transition-transform group-hover:-translate-y-1">05:45 PM</span>
+<div class="w-12 h-12 bg-surface border-2 border-primary rounded-xl flex items-center justify-center shadow-lg transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">fitness_center</span>
+</div>
+<span class="font-title-md text-title-md mt-sm">Peak Performance</span>
+</div>
+</div>
+<!-- AI Overlay / Summary Card -->
+<div class="absolute bottom-margin left-margin right-margin md:left-auto md:right-margin md:w-80 floating-card rounded-xl p-lg shadow-2xl flex flex-col gap-md">
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Daily Insight</span>
+<span class="material-symbols-outlined text-secondary ai-pulse">auto_awesome</span>
+</div>
+<div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile font-bold">Optimization Summary</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs">AI successfully rerouted travel during peak office hours.</p>
+</div>
+<div class="grid grid-cols-2 gap-md pt-sm border-t border-outline-variant">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Total Travel</span>
+<span class="font-title-md text-title-md font-bold">42 mins</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">AI Saved</span>
+<span class="font-title-md text-title-md font-bold text-secondary">-12 mins</span>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-label-sm text-label-sm uppercase tracking-widest py-md rounded-lg transition-all hover:bg-opacity-90 hover:shadow-md">View Full Log</button>
+</div>
+</div>
+<!-- Floatting Map Actions -->
+<div class="absolute top-margin right-margin z-20 flex flex-col gap-sm">
+<button class="w-10 h-10 bg-surface border border-outline-variant rounded-full flex items-center justify-center shadow-sm hover:bg-surface-container-high">
+<span class="material-symbols-outlined text-on-surface-variant">add</span>
+</button>
+<button class="w-10 h-10 bg-surface border border-outline-variant rounded-full flex items-center justify-center shadow-sm hover:bg-surface-container-high">
+<span class="material-symbols-outlined text-on-surface-variant">remove</span>
+</button>
+<button class="w-10 h-10 bg-secondary text-on-secondary rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-transform active:scale-95">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">my_location</span>
+</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 flex justify-around items-center px-md py-sm bg-surface dark:bg-surface-dim border-t border-outline-variant dark:border-outline">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-md py-xs hover:text-primary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-md py-xs hover:text-primary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">wb_sunny</span>
+<span class="font-label-sm text-label-sm mt-1">Briefing</span>
+</a>
+<div class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-full px-md py-xs transition-transform duration-150 scale-100 shadow-lg">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">map</span>
+<span class="font-label-sm text-label-sm mt-1">Assistant</span>
+</div>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-md py-xs hover:text-primary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">emergency</span>
+<span class="font-label-sm text-label-sm mt-1">Alerts</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-md py-xs hover:text-primary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm mt-1">Settings</span>
+</a>
+</nav>
+<!-- Micro-interactions Script -->
+<script>
+        // Simple hover effect for destination markers
+        document.querySelectorAll('.group').forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                // Potential future interaction: highlight the path section
+            });
+        });
+
+        // Initialize active state logic: "Assistant" is treated as the current tab for this view
+        // Mapping: Geolocalisation/Map view sits under the AI Assistant logic of Krono AI.
+    </script>
+</body></html>

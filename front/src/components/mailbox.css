@@ -1,0 +1,120 @@
+/*
+ * mailbox.css
+ * Styles du module messagerie (MailboxPanel). Toutes les couleurs passent par
+ * les variables du thème (techsphere.css) : elles changent avec data-theme,
+ * donc le module reste lisible en mode clair comme en mode sombre.
+ */
+
+.mbx-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text-1);
+}
+
+.mbx-title { color: var(--text-1); font-weight: 700; }
+.mbx-subtitle { color: var(--text-2); font-size: 13px; font-weight: 600; }
+.mbx-muted { color: var(--text-3); font-size: 12px; }
+.mbx-hint { color: var(--text-muted); font-size: 11px; }
+
+.mbx-label {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mbx-input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: var(--bg-main);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+.mbx-input::placeholder { color: var(--text-muted); }
+.mbx-input:focus { border-color: var(--accent); }
+
+.mbx-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.mbx-btn:hover:not(:disabled) { background: var(--accent-lo); color: var(--text-1); }
+.mbx-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mbx-btn-primary { background: var(--accent); color: #ffffff; border-color: transparent; }
+.mbx-btn-primary:hover:not(:disabled) { background: var(--accent); color: #ffffff; filter: brightness(1.08); }
+.mbx-btn-block { width: 100%; justify-content: center; }
+.mbx-btn-icon { padding: 8px; }
+
+.mbx-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.mbx-alert-ok { background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.4); }
+.mbx-alert-err { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); }
+.mbx-alert-warn { background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.45); }
+
+.mbx-list { border: 1px solid var(--border); border-radius: 16px; background: var(--bg-card); overflow: hidden; }
+.mbx-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.mbx-list-item:last-child { border-bottom: none; }
+.mbx-list-item:hover { background: var(--bg-hover); }
+.mbx-list-item.active { background: var(--accent-lo); }
+.mbx-list-from { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mbx-list-from.unread { color: var(--text-1); font-weight: 700; }
+.mbx-list-subject { font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.mbx-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+.mbx-body {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.mbx-select {
+  padding: 8px 10px;
+  background: var(--bg-card);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.mbx-select option { background: var(--bg-card); color: var(--text-1); }
+
+.mbx-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }

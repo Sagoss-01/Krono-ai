@@ -1,0 +1,1461 @@
+const { getMailboxStatus, fetchEmails } = require('./imap');
+const { saveMessage, getHistory, roomId, markRead, addReaction, removeReaction, deleteMessage } = require('./chat');
+const logger = require('./logger');
+const { pool } = require('./db');
+const { decrypt } = require('../middlewares/encrypt');
+
+// Historique des chats de réunion (en mémoire, vidé quand la réunion se termine)
+const meetingChatHistory = new Map();
+
+// Notes collaboratives par réunion (en mémoire)
+const meetingNotes = new Map(); // meetingId → { content, revision, updatedAt }
+
+// Tableau blanc : état persistant par réunion pour les late joiners
+const wbStates  = new Map(); // meetingId → { objects } | { dataUrl }
+const quizVotes       = new Map(); // quizId → { votes, voters, voterNames, options, correctIdx, question, scores, meetingId }
+const quizLeaderboard = new Map(); // meetingId → { displayName → totalScore }
+
+    // Salle d'attente : meetingId → Map(socketId → { email, displayName, socket })
+const waitingRooms = new Map();
+
+// Approbations mémorisées : meetingId → Set(email) — évite re-approbation après rechargement
+const approvedParticipants = new Map();
+const meetingPolls = new Map(); // meetingId -> active poll state
+const meetingUploadChunks = new Map(); // uploadId -> chunk accumulator
+const meetingCatalysts = new Map(); // meetingId -> Set(email)
+const meetingSessions = new Map(); // meetingId -> { startedAt, expiresAt, promptForExpiresAt, ticker }
+const meetingParticipation = new Map(); // meetingId -> Map(email -> stats)
+const meetingBans = new Map(); // meetingId -> Array<{email,browserId,ip}>
+const meetingAdminLogs = new Map(); // meetingId -> Array<{at, actor, action, target, detail}>
+const meetingLocks = new Map(); // meetingId -> {locked:boolean, mode:'waiting'|'refuse'}
+const meetingParticipantPermissions = new Map(); // meetingId -> Map(email -> permissions)
+const meetingTempExpulsions = new Map(); // meetingId -> Array<{email,browserId,ip,until,mode,manual}>
+const meetingRejoinState = new Map(); // meetingId -> Map(email -> 'active'|'waiting'|'removed'|'banned'|'expelled'>
+
+
+
+function getMeetingAdminLog(meetingId) {
+  if (!meetingAdminLogs.has(meetingId)) meetingAdminLogs.set(meetingId, []);
+  return meetingAdminLogs.get(meetingId);
+}
+function getMeetingLock(meetingId) {
+  return meetingLocks.get(meetingId) || { locked: false, mode: 'waiting' };
+}
+function setMeetingLock(meetingId, locked, mode = 'waiting') {
+  const next = { locked: !!locked, mode: mode === 'refuse' ? 'refuse' : 'waiting' };
+  meetingLocks.set(meetingId, next);
+  return next;
+}
+function getMeetingPermissionsStore(meetingId) {
+  if (!meetingParticipantPermissions.has(meetingId)) meetingParticipantPermissions.set(meetingId, new Map());
+  return meetingParticipantPermissions.get(meetingId);
+}
+function defaultParticipantPermissions() {
+  return { canUnmute: true, canUseCamera: true, canShareScreen: true, canChat: true, readOnly: false, forceMuted: false, canSpeak: true };
+}
+function getParticipantPermissions(meetingId, email = '') {
+  const key = String(email || '').trim().toLowerCase();
+  const store = getMeetingPermissionsStore(meetingId);
+  if (!store.has(key)) store.set(key, defaultParticipantPermissions());
+  return store.get(key);
+}
+function setParticipantPermissions(meetingId, email = '', patch = {}) {
+  const key = String(email || '').trim().toLowerCase();
+  const current = { ...getParticipantPermissions(meetingId, key), ...(patch || {}) };
+  if (current.readOnly) {
+    current.canUnmute = false; current.canUseCamera = false; current.canShareScreen = false; current.canChat = false; current.canSpeak = false;
+  }
+  if (current.forceMuted) current.canUnmute = false;
+  getMeetingPermissionsStore(meetingId).set(key, current);
+  return current;
+}
+function getMeetingExpulsions(meetingId) {
+  if (!meetingTempExpulsions.has(meetingId)) meetingTempExpulsions.set(meetingId, []);
+  return meetingTempExpulsions.get(meetingId);
+}
+function getMeetingRejoinStore(meetingId) {
+  if (!meetingRejoinState.has(meetingId)) meetingRejoinState.set(meetingId, new Map());
+  return meetingRejoinState.get(meetingId);
+}
+function setRejoinState(meetingId, email, state) {
+  if (!email) return;
+  getMeetingRejoinStore(meetingId).set(String(email).trim().toLowerCase(), state);
+}
+function getRejoinState(meetingId, email) {
+  return getMeetingRejoinStore(meetingId).get(String(email || '').trim().toLowerCase()) || null;
+}
+function isTempExpelled(meetingId, identity = {}) {
+  const list = getMeetingExpulsions(meetingId);
+  const now = Date.now();
+  let matched = null;
+  const kept = [];
+  for (const entry of list) {
+    const active = entry.manual || entry.until === 'end' || (Number(entry.until) > now);
+    if (!active) continue;
+    kept.push(entry);
+    const hit = (identity.email && entry.email && entry.email === identity.email) || (identity.browserId && entry.browserId && entry.browserId === identity.browserId) || (identity.ip && entry.ip && entry.ip === identity.ip);
+    if (hit) matched = entry;
+  }
+  meetingTempExpulsions.set(meetingId, kept);
+  return matched;
+}
+function addTempExpulsion(meetingId, identity = {}, opts = {}) {
+  const list = getMeetingExpulsions(meetingId);
+  const entry = { email: String(identity.email || '').trim().toLowerCase(), browserId: String(identity.browserId || '').trim(), ip: String(identity.ip || '').trim(), until: opts.manual ? null : (opts.until === 'end' ? 'end' : Number(opts.until || 0)), mode: opts.mode || 'temporary', manual: !!opts.manual };
+  list.push(entry);
+  return entry;
+}
+function addAdminLog(io, meetingId, actorSocket, action, target = '', detail = '') {
+  const actorName = actorSocket?.data?.displayName || actorSocket?.data?.meetingEmail || (actorSocket?.data?.isHost ? 'Host' : 'Admin');
+  const row = { at: new Date().toISOString(), actor: actorName, action, target, detail };
+  const log = getMeetingAdminLog(meetingId);
+  log.push(row);
+  while (log.length > 200) log.shift();
+  io.to(`meeting:${meetingId}`).emit('meeting_admin_log_sync', { logs: log });
+}
+function emitAdminSnapshot(io, meetingId, targetSocket = null) {
+  const payload = { logs: getMeetingAdminLog(meetingId), lock: getMeetingLock(meetingId) };
+  if (targetSocket) targetSocket.emit('meeting_admin_state', payload);
+  else io.to(`meeting:${meetingId}`).emit('meeting_admin_state', payload);
+}
+function cleanWaitingEntry(entry = {}) {
+  return { socketId: entry.socketId, email: entry.email || '', displayName: entry.displayName || 'Participant', joinedAt: entry.joinedAt || new Date().toISOString(), attempts: Number(entry.attempts || 1), message: entry.message || '' };
+}
+function upsertWaitingParticipant(meetingId, entry = {}) {
+  const waiting = waitingRooms.get(meetingId) || new Map();
+  waitingRooms.set(meetingId, waiting);
+  waiting.set(entry.socketId, cleanWaitingEntry(entry));
+  return waiting;
+}
+function emitWaitingRoomList(io, meetingId) {
+  const waiting = waitingRooms.get(meetingId);
+  const waitList = waiting ? Array.from(waiting.values()).map(cleanWaitingEntry) : [];
+  io.to(`meeting:${meetingId}`).emit('waiting_room_list', { waitList });
+}
+function findSocketByEmail(io, meetingId, email = '') {
+  const room = io.sockets.adapter.rooms.get(`meeting:${meetingId}`) || [];
+  const normalized = String(email || '').trim().toLowerCase();
+  for (const sid of room) {
+    const sock = io.sockets.sockets.get(sid);
+    if (!sock || sock.data?.waiting) continue;
+    if (String(sock.data?.meetingEmail || '').trim().toLowerCase() === normalized) return sock;
+  }
+  return null;
+}
+function forceCleanupParticipant(io, meetingId, targetSocket, reason = 'cleanup') {
+  if (!targetSocket) return;
+  removeSocketFromMeeting(io, targetSocket, meetingId, 'meeting_peer_left');
+  targetSocket.emit('meeting_force_cleanup', { reason });
+}
+
+function parseCookieHeader(cookieHeader = '') {
+  return String(cookieHeader || '').split(';').reduce((acc, part) => {
+    const idx = part.indexOf('=');
+    if (idx === -1) return acc;
+    const key = part.slice(0, idx).trim();
+    const value = decodeURIComponent(part.slice(idx + 1).trim());
+    if (key) acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function getSocketIdentity(socket, fallbackEmail = '') {
+  const cookies = parseCookieHeader(socket?.handshake?.headers?.cookie || '');
+  const xfwd = String(socket?.handshake?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+  return {
+    email: String(fallbackEmail || socket?.data?.meetingEmail || '').trim().toLowerCase(),
+    browserId: String(cookies.browser_id || cookies.browserId || '').trim(),
+    ip: xfwd || socket?.handshake?.address || '',
+  };
+}
+
+function getMeetingBanList(meetingId) {
+  if (!meetingBans.has(meetingId)) meetingBans.set(meetingId, []);
+  return meetingBans.get(meetingId);
+}
+
+function isMeetingBanned(meetingId, identity = {}) {
+  const bans = getMeetingBanList(meetingId);
+  return bans.some(entry =>
+    (identity.email && entry.email && entry.email === identity.email) ||
+    (identity.browserId && entry.browserId && entry.browserId === identity.browserId) ||
+    (identity.ip && entry.ip && entry.ip === identity.ip)
+  );
+}
+
+function addMeetingBan(meetingId, identity = {}) {
+  const bans = getMeetingBanList(meetingId);
+  if (isMeetingBanned(meetingId, identity)) return;
+  bans.push({
+    email: String(identity.email || '').trim().toLowerCase(),
+    browserId: String(identity.browserId || '').trim(),
+    ip: String(identity.ip || '').trim(),
+  });
+}
+
+function removeSocketFromMeeting(io, socket, meetingId, eventName = 'meeting_peer_left') {
+  const room = `meeting:${meetingId}`;
+  try { socket.leave(room); } catch (_) {}
+  socket.data.waiting = false;
+  socket.to(room).emit(eventName, { socketId: socket.id });
+}
+async function persistMeetingChatMessage(meetingId, msg) {
+  const [result] = await pool.execute(`
+    INSERT INTO meeting_chat_messages
+      (meeting_id, sender, display_name, anonymous, content, file_id, file_name, file_type, file_size, file_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    meetingId,
+    msg.email || '',
+    msg.anonymous ? null : (msg.displayName || null),
+    msg.anonymous ? 1 : 0,
+    msg.text || null,
+    msg.fileId || null,
+    msg.fileName || null,
+    msg.fileType || null,
+    msg.fileSize || null,
+    msg.fileUrl || null,
+  ]);
+  return Number(result.insertId);
+}
+
+async function loadMeetingChatHistory(meetingId, limit = 200) {
+  const safeLimit = Math.max(1, Math.min(500, parseInt(limit, 10) || 200));
+  const [rows] = await pool.execute(`
+    SELECT id, sender, display_name, anonymous, content, file_id, file_name, file_type, file_size, file_url, created_at
+    FROM meeting_chat_messages
+    WHERE meeting_id = ?
+    ORDER BY created_at ASC, id ASC
+    LIMIT ${safeLimit}
+  `, [meetingId]);
+  return rows.map(r => ({
+    id: r.id,
+    socketId: null,
+    email: r.sender,
+    displayName: r.anonymous ? 'Un participant' : (r.display_name || r.sender || 'Un participant'),
+    anonymous: !!r.anonymous,
+    text: r.content || null,
+    fileName: r.file_name || null,
+    fileSize: r.file_size || null,
+    fileType: r.file_type || null,
+    fileUrl: r.file_url || null,
+    fileId: r.file_id || null,
+    at: r.created_at instanceof Date ? r.created_at.toISOString() : new Date(r.created_at).toISOString(),
+  }));
+}
+
+async function getOrLoadMeetingChatHistory(meetingId) {
+  let history = meetingChatHistory.get(meetingId);
+  if (!history) {
+    history = await loadMeetingChatHistory(meetingId);
+    meetingChatHistory.set(meetingId, history);
+  }
+  return history;
+}
+
+function getActivePollSnapshot(poll) {
+  if (!poll) return null;
+  return {
+    id: poll.id,
+    question: poll.question,
+    options: poll.options,
+    votes: poll.votes,
+    expectedVotes: poll.expectedVotes || 0,
+    receivedVotes: poll.voters?.size || 0,
+    allAnswered: !!poll.allAnswered,
+    closed: !!poll.closed,
+  };
+}
+
+function getMeetingUploadQuotaBytes() {
+  const quotaMb = Math.max(1, parseInt(process.env.MEETING_CHAT_UPLOAD_QUOTA_MB || '100', 10));
+  return quotaMb * 1024 * 1024;
+}
+
+function getDirSizeBytes(dir) {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).reduce((sum, entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return sum + getDirSizeBytes(full);
+      if (entry.isFile()) return sum + (fs.statSync(full).size || 0);
+      return sum;
+    }, 0);
+  } catch (_) {
+    return 0;
+  }
+}
+
+function finalizeMeetingChunkUpload(upload) {
+  const crypto = require('crypto');
+  const fs = require('fs');
+  const path = require('path');
+
+  const baseDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'chat', upload.meetingId);
+  fs.mkdirSync(baseDir, { recursive: true });
+
+  const totalSize = upload.chunks.reduce((sum, b) => sum + (b?.length || 0), 0);
+  const quotaBytes = getMeetingUploadQuotaBytes();
+  const currentUsage = getDirSizeBytes(baseDir);
+  if ((currentUsage + totalSize) > quotaBytes) {
+    const err = new Error(`Quota d'upload dépassé pour cette réunion (max ${Math.round(quotaBytes / 1048576)} Mo).`);
+    err.code = 'UPLOAD_QUOTA_EXCEEDED';
+    throw err;
+  }
+
+  const safeOriginal = (upload.originalname || 'fichier').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const fileId = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const filename = `${fileId}_${safeOriginal}`;
+  const absPath = path.join(baseDir, filename);
+
+  fs.writeFileSync(absPath, Buffer.concat(upload.chunks));
+  return {
+    fileId,
+    fileName: upload.originalname || safeOriginal,
+    fileSize: totalSize,
+    fileType: upload.mimetype || 'application/octet-stream',
+    fileUrl: `/uploads/chat/${upload.meetingId}/${filename}`,
+  };
+}
+
+
+
+function getMeetingSession(meetingId) {
+  return meetingSessions.get(meetingId) || null;
+}
+
+function ensureMeetingSession(io, meetingId) {
+  let session = meetingSessions.get(meetingId);
+  if (!session) {
+    const startedAt = Date.now();
+    session = { startedAt, expiresAt: startedAt + (65 * 60 * 1000), promptForExpiresAt: null, ticker: null };
+    meetingSessions.set(meetingId, session);
+  }
+  if (!session.ticker) {
+    session.ticker = setInterval(() => {
+      const current = meetingSessions.get(meetingId);
+      if (!current) return;
+      const room = `meeting:${meetingId}`;
+      const roomSockets = io.sockets.adapter.rooms.get(room);
+      const now = Date.now();
+      if (current.expiresAt && now >= current.expiresAt) {
+        io.to(room).emit('meeting_ended');
+        if (current.ticker) clearInterval(current.ticker);
+        meetingSessions.delete(meetingId);
+        return;
+      }
+      if (current.expiresAt && now >= (current.expiresAt - 5 * 60 * 1000) && current.promptForExpiresAt !== current.expiresAt) {
+        current.promptForExpiresAt = current.expiresAt;
+        (roomSockets ? Array.from(roomSockets) : []).forEach(sid => {
+          const sock = io.sockets.sockets.get(sid);
+          if (sock && socketHasControlPower(meetingId, sock)) sock.emit('meeting_extension_prompt', { expiresAt: new Date(current.expiresAt).toISOString() });
+        });
+      }
+    }, 5000);
+  }
+  return session;
+}
+
+function emitMeetingTimerSync(io, meetingId, targetSocket = null) {
+  const session = getMeetingSession(meetingId);
+  if (!session) return;
+  const payload = { startedAt: new Date(session.startedAt).toISOString(), expiresAt: new Date(session.expiresAt).toISOString() };
+  if (targetSocket) targetSocket.emit('meeting_timer_sync', payload);
+  else io.to(`meeting:${meetingId}`).emit('meeting_timer_sync', payload);
+}
+
+function getMeetingParticipationStore(meetingId) {
+  if (!meetingParticipation.has(meetingId)) meetingParticipation.set(meetingId, new Map());
+  return meetingParticipation.get(meetingId);
+}
+
+function touchParticipantStat(meetingId, sock) {
+  const email = sock?.data?.meetingEmail || `guest:${sock?.id || 'unknown'}`;
+  const store = getMeetingParticipationStore(meetingId);
+  if (!store.has(email)) store.set(email, { email, displayName: sock?.data?.displayName || email, handRaises: 0, speechTurns: 0, speakingMs: 0, speakingSince: null, isHost: !!sock?.data?.isHost, isCatalyst: !!sock?.data?.isCatalyst });
+  const row = store.get(email);
+  row.displayName = sock?.data?.displayName || row.displayName;
+  row.isHost = !!sock?.data?.isHost;
+  row.isCatalyst = !!sock?.data?.isCatalyst;
+  return row;
+}
+
+function buildParticipationStats(meetingId) {
+  return Array.from(getMeetingParticipationStore(meetingId).values())
+    .filter(row => !row.isHost && !row.isCatalyst)
+    .map(row => ({ ...row, speakingMs: row.speakingMs + (row.speakingSince ? (Date.now() - row.speakingSince) : 0) }))
+    .sort((a, b) => (b.speakingMs - a.speakingMs) || (b.speechTurns - a.speechTurns) || (b.handRaises - a.handRaises));
+}
+
+function emitParticipationStats(io, meetingId, targetSocket = null) {
+  const payload = { stats: buildParticipationStats(meetingId) };
+  const room = `meeting:${meetingId}`;
+  if (targetSocket) return targetSocket.emit('participation_stats', payload);
+  const roomSockets = io.sockets.adapter.rooms.get(room) || [];
+  Array.from(roomSockets).forEach(sid => {
+    const sock = io.sockets.sockets.get(sid);
+    if (sock && socketHasControlPower(meetingId, sock)) sock.emit('participation_stats', payload);
+  });
+}
+function getMeetingCatalystSet(meetingId) {
+  if (!meetingCatalysts.has(meetingId)) meetingCatalysts.set(meetingId, new Set());
+  return meetingCatalysts.get(meetingId);
+}
+
+function socketHasControlPower(meetingId, sock) {
+  return !!(sock?.data?.isHost || (sock?.data?.meetingEmail && getMeetingCatalystSet(meetingId).has(sock.data.meetingEmail)));
+}
+
+function syncCatalystRole(io, meetingId, sock, enabled) {
+  if (!sock) return;
+  sock.data.isCatalyst = !!enabled;
+  sock.emit('meeting_role_sync', {
+    socketId: sock.id,
+    email: sock.data.meetingEmail || '',
+    displayName: sock.data.displayName || '',
+    role: 'catalyst',
+    enabled: !!enabled,
+    mine: true,
+  });
+  sock.to(`meeting:${meetingId}`).emit('meeting_role_sync', {
+    socketId: sock.id,
+    email: sock.data.meetingEmail || '',
+    displayName: sock.data.displayName || '',
+    role: 'catalyst',
+    enabled: !!enabled,
+    mine: false,
+  });
+}
+
+function initSocket(io, sessionMiddleware) {
+  if (sessionMiddleware) {
+    io.use((socket, next) => sessionMiddleware(socket.request, socket.request.res || {}, next));
+  }
+
+  io.on('connection', (socket) => {
+    const session      = socket.request.session;
+    const sessionEmail = session?.activeAccount || session?.accounts?.[0]?.email;
+
+    // Rejoindre la room inbox personnelle (pour notifs hors conversation)
+    if (sessionEmail) socket.join(`inbox:${sessionEmail}`);
+
+    // ── IMAP POLL ──────────────────────────────────────
+    let timer = null, lastUidNext = -1;
+
+    socket.on('start_poll', ({ email, folder, knownMaxUid }) => {
+      const account = session?.accounts?.find(a => a.email === email);
+      if (!account) return;
+      const rawPwd = account.password || '';
+      const password = rawPwd.includes(':') ? (decrypt(rawPwd) || rawPwd) : rawPwd;
+      const creds = { email: account.email, password };
+      const watchFolder = folder || 'INBOX';
+      let lastMaxUid = knownMaxUid > 0 ? knownMaxUid : -1;
+
+      const poll = async () => {
+        try {
+          const status = await getMailboxStatus(creds, watchFolder);
+          if (lastUidNext === -1) {
+            lastUidNext = status.uidnext;
+            socket.emit('unread_update', { count: status.unseen, folder: watchFolder });
+            return;
+          }
+          if (status.uidnext > lastUidNext) {
+            const limit   = Math.min(Math.max(5, status.uidnext - lastUidNext), 20);
+            const fetched = await fetchEmails(creds, watchFolder, limit);
+            const thresh  = lastMaxUid > 0 ? lastMaxUid : lastUidNext - 1;
+            const fresh   = fetched.filter(e => e.uid > thresh);
+            if (fresh.length > 0) {
+              lastMaxUid = Math.max(...fresh.map(e => e.uid));
+              socket.emit('new_mail', { count: fresh.length, total: status.unseen, emails: fresh, folder: watchFolder });
+            }
+            lastUidNext = status.uidnext;
+          }
+          socket.emit('unread_update', { count: status.unseen, folder: watchFolder });
+        } catch(e) {
+          logger.app(email, 'WARN', `Poll: ${e.message}`);
+        }
+      };
+
+      poll();
+      if (timer) clearInterval(timer);
+      timer = setInterval(poll, 8000);
+    });
+
+    socket.on('stop_poll', () => {
+      if (timer) { clearInterval(timer); timer = null; }
+      lastUidNext = -1;
+    });
+
+    // ── CHAT ───────────────────────────────────────────
+    const joinedRooms = new Set();
+
+    socket.on('chat_join', ({ myEmail, peerEmail }) => {
+      if (!session?.accounts?.find(a => a.email === myEmail)) return;
+      const room = roomId(myEmail, peerEmail);
+      socket.join(room);
+      joinedRooms.add(room);
+    });
+
+    socket.on('chat_send', async ({ myEmail, peerEmail, content, mediaType, mediaName, mediaMime, mediaSize, mediaData }) => {
+      if (!session?.accounts?.find(a => a.email === myEmail)) return;
+
+      const room = roomId(myEmail, peerEmail);
+
+      let mediaBuffer = null;
+      if (mediaData && mediaType !== 'text') {
+        try {
+          mediaBuffer = Buffer.from(mediaData, 'base64');
+        } catch(e) {
+          logger.app(myEmail, 'WARN', `Chat: decode base64 echoue: ${e.message}`);
+        }
+      }
+
+      try {
+        const id_result = await saveMessage({
+          room,
+          sender:      myEmail,
+          peer:        peerEmail,
+          content:     content   || null,
+          mediaType:   mediaType || 'text',
+          mediaName:   mediaName || null,
+          mediaMime:   mediaMime || null,
+          mediaSize:   mediaSize || null,
+          mediaBuffer: mediaBuffer,
+        });
+        const id = id_result.id;
+        const resolvedMediaPath = id_result.mediaPath;
+
+        await markRead(myEmail, peerEmail);
+
+        const msg = {
+          id,
+          sender:     myEmail,
+          content:    content   || null,
+          media_type: mediaType || 'text',
+          media_name: mediaName || null,
+          media_mime: mediaMime || null,
+          media_size: mediaSize || null,
+          media_path: resolvedMediaPath || null,
+          has_media:  resolvedMediaPath ? 1 : 0,
+          created_at: new Date().toISOString(),
+        };
+
+        // Envoyer dans la room (destinataire si la conv est ouverte)
+        // On exclut l'expéditeur pour éviter le double affichage
+        socket.to(room).emit('chat_message', { room, message: msg, peer: peerEmail });
+
+        // Si le destinataire n'est pas dans la room → notif inbox
+        const roomSockets = await io.in(room).fetchSockets();
+        const peerInRoom  = roomSockets.some(s => {
+          const sEmail = s.request?.session?.activeAccount || s.request?.session?.accounts?.[0]?.email;
+          return sEmail === peerEmail;
+        });
+
+        if (!peerInRoom) {
+          io.to(`inbox:${peerEmail}`).emit('chat_message', { room, message: msg, peer: myEmail });
+        }
+
+        // Renvoyer à l'expéditeur uniquement son propre message (pour confirmation)
+        socket.emit('chat_message', { room, message: msg, peer: peerEmail });
+
+        logger.app(myEmail, 'INFO', `Chat -> ${peerEmail} [${mediaType || 'text'}]`);
+      } catch(e) {
+        socket.emit('chat_error', { error: 'Erreur envoi' });
+        logger.app(myEmail, 'ERROR', `Chat save: ${e.message}`);
+      }
+    });
+
+    socket.on('chat_leave', ({ myEmail, peerEmail }) => {
+      const room = roomId(myEmail, peerEmail);
+      socket.leave(room);
+      joinedRooms.delete(room);
+    });
+
+    // ── TYPING INDICATOR ─────────────────────────────────
+    socket.on('chat_typing', ({ myEmail, peerEmail, typing }) => {
+      if (!session?.accounts?.find(a => a.email === myEmail)) return;
+      const room = roomId(myEmail, peerEmail);
+      // Envoyer uniquement au peer (pas à soi-même)
+      const roomSockets = io.sockets.adapter.rooms.get(room);
+      if (roomSockets) {
+        roomSockets.forEach(sid => {
+          const s = io.sockets.sockets.get(sid);
+          if (!s || s.id === socket.id) return;
+          s.emit('chat_typing', { from: myEmail, typing });
+        });
+      }
+      // Aussi via inbox si le peer n'a pas la conv ouverte
+      socket.to(`inbox:${peerEmail}`).emit('chat_typing', { from: myEmail, typing });
+    });
+
+    // ── RÉACTION EMOJI ────────────────────────────────
+    socket.on('chat_react', async ({ myEmail, peerEmail, msgId, emoji }) => {
+      if (!session?.accounts?.find(a => a.email === myEmail)) return;
+      const room = roomId(myEmail, peerEmail);
+      try {
+        const reactions = await addReaction(msgId, myEmail, emoji);
+        io.to(room).emit('chat_reaction', { msgId, reactions });
+        socket.to(`inbox:${peerEmail}`).emit('chat_reaction', { msgId, reactions });
+      } catch(e) { logger.app(myEmail, 'ERROR', `React: ${e.message}`); }
+    });
+
+    socket.on('chat_unreact', async ({ myEmail, peerEmail, msgId, emoji }) => {
+      if (!session?.accounts?.find(a => a.email === myEmail)) return;
+      const room = roomId(myEmail, peerEmail);
+      try {
+        const reactions = await removeReaction(msgId, myEmail, emoji);
+        io.to(room).emit('chat_reaction', { msgId, reactions });
+        socket.to(`inbox:${peerEmail}`).emit('chat_reaction', { msgId, reactions });
+      } catch(e) {}
+    });
+
+    // ── SUPPRESSION MESSAGE ───────────────────────────
+    socket.on('chat_delete', async ({ myEmail, peerEmail, msgId }) => {
+      if (!session?.accounts?.find(a => a.email === myEmail)) return;
+      const room = roomId(myEmail, peerEmail);
+      try {
+        await deleteMessage(msgId, myEmail);
+        io.to(room).emit('chat_deleted', { msgId });
+        socket.to(`inbox:${peerEmail}`).emit('chat_deleted', { msgId });
+      } catch(e) { socket.emit('chat_error', { error: 'Impossible de supprimer' }); }
+    });
+
+    socket.on('disconnect', () => {
+      if (timer) { clearInterval(timer); timer = null; }
+      joinedRooms.forEach(r => socket.leave(r));
+      for (const [mid, waiting] of waitingRooms) {
+        if (waiting?.has(socket.id)) {
+          waiting.delete(socket.id);
+          emitWaitingRoomList(io, mid);
+        }
+      }
+      if (socket.data.meetingId) {
+        const room = `meeting:${socket.data.meetingId}`;
+        const stat = touchParticipantStat(socket.data.meetingId, socket);
+        if (stat.speakingSince) { stat.speakingMs = (stat.speakingMs || 0) + (Date.now() - stat.speakingSince); stat.speakingSince = null; }
+        emitParticipationStats(io, socket.data.meetingId);
+        socket.to(room).emit('meeting_peer_left', { socketId: socket.id });
+      }
+    });
+
+    // ── WEBRTC SIGNALING (réunions) ───────────────────
+
+    // Fonction interne : admettre un participant dans la salle
+    function admitParticipant(meetingId, participantEmail, participantName, isHost = false) {
+      const room = `meeting:${meetingId}`;
+      const normalizedEmail = String(participantEmail || '').trim().toLowerCase();
+      const existingSock = findSocketByEmail(io, meetingId, normalizedEmail);
+      if (existingSock && existingSock.id !== socket.id) forceCleanupParticipant(io, meetingId, existingSock, 'rejoin');
+      socket.join(room);
+      socket.data.meetingId    = meetingId;
+      socket.data.meetingEmail = normalizedEmail;
+      socket.data.displayName  = participantName;
+      socket.data.isHost       = !!isHost;
+      socket.data.isCatalyst   = !isHost && getMeetingCatalystSet(meetingId).has(normalizedEmail);
+      socket.data.waiting      = false;
+      touchParticipantStat(meetingId, socket);
+      if (isHost) ensureMeetingSession(io, meetingId);
+
+      if (!approvedParticipants.has(meetingId)) approvedParticipants.set(meetingId, new Set());
+      approvedParticipants.get(meetingId).add(normalizedEmail);
+      const permissions = setParticipantPermissions(meetingId, normalizedEmail, getParticipantPermissions(meetingId, normalizedEmail));
+      setRejoinState(meetingId, normalizedEmail, 'active');
+
+      socket.to(room).emit('meeting_peer_joined', {
+        socketId: socket.id, email: normalizedEmail, displayName: participantName, isSharing: !!socket.data.isSharing, isCatalyst: !!socket.data.isCatalyst,
+      });
+
+      const roomSockets = io.sockets.adapter.rooms.get(room);
+      const peers = [];
+      if (roomSockets) {
+        roomSockets.forEach(sid => {
+          if (sid === socket.id) return;
+          const s = io.sockets.sockets.get(sid);
+          if (s) peers.push({ socketId: sid, email: s.data.meetingEmail || '', displayName: s.data.displayName || '', isSharing: s.data.isSharing || false, isCatalyst: !!s.data.isCatalyst });
+        });
+      }
+      socket.emit('meeting_peers_list', { peers, permissions, rejoinState: getRejoinState(meetingId, normalizedEmail) });
+      socket.emit('meeting_permissions_sync', { permissions, targetEmail: normalizedEmail, socketId: socket.id, mine: true });
+
+      const notes = meetingNotes.get(meetingId);
+      if (notes?.content) socket.emit('notes_state', { content: notes.content, revision: notes.revision });
+      getOrLoadMeetingChatHistory(meetingId).then(history => { if (history.length) socket.emit('meeting_chat_history', { messages: history }); }).catch(() => {});
+
+      const wbState = wbStates.get(meetingId);
+      if (wbState) setTimeout(() => socket.emit('wb_state', wbState), 800);
+      if (isHost) emitMeetingTimerSync(io, meetingId);
+      else emitMeetingTimerSync(io, meetingId, socket);
+      emitParticipationStats(io, meetingId);
+      if (socket.data.isCatalyst) setTimeout(() => syncCatalystRole(io, meetingId, socket, true), 250);
+      emitAdminSnapshot(io, meetingId, socket);
+    }
+
+    socket.on('meeting_join', ({ meetingId, email, displayName, isHost, bypassWaiting, message }) => {
+      const participantEmail = String(email || sessionEmail || `guest-${socket.id.slice(0,6)}`).trim().toLowerCase();
+      const participantName  = displayName || participantEmail;
+      const identity = getSocketIdentity(socket, participantEmail);
+      const waiting = waitingRooms.get(meetingId);
+      const waitAttempts = Array.from(waiting?.values?.() || []).filter(w => String(w.email || '').trim().toLowerCase() === participantEmail).length + 1;
+      const lock = getMeetingLock(meetingId);
+      const tempExpelled = isTempExpelled(meetingId, identity);
+      const rejoinState = getRejoinState(meetingId, participantEmail);
+
+      if (isMeetingBanned(meetingId, identity)) {
+        setRejoinState(meetingId, participantEmail, 'banned');
+        return socket.emit('meeting_banned', { reason: "Vous n'êtes pas autorisé à rejoindre cette réunion." });
+      }
+      if (tempExpelled) {
+        setRejoinState(meetingId, participantEmail, 'expelled');
+        return socket.emit('meeting_temp_expelled', { until: tempExpelled.until, mode: tempExpelled.mode || 'temporary', manual: !!tempExpelled.manual });
+      }
+
+      if (isHost) {
+        admitParticipant(meetingId, participantEmail, participantName, true);
+        emitWaitingRoomList(io, meetingId);
+        emitAdminSnapshot(io, meetingId, socket);
+        return;
+      }
+
+      const approved = approvedParticipants.get(meetingId);
+      if (bypassWaiting && approved?.has(participantEmail) && !['waiting','removed','banned','expelled'].includes(rejoinState || '')) {
+        admitParticipant(meetingId, participantEmail, participantName, false);
+        return;
+      }
+
+      const room = `meeting:${meetingId}`;
+      const roomSockets = io.sockets.adapter.rooms.get(room);
+      const noActiveRoom = !roomSockets || roomSockets.size === 0;
+      const mustRefuse = !noActiveRoom && lock.locked && lock.mode === 'refuse';
+      const mustWait = !noActiveRoom && (lock.locked || rejoinState === 'waiting' || !approved?.has(participantEmail));
+
+      if (!mustWait && !mustRefuse) {
+        admitParticipant(meetingId, participantEmail, participantName, false);
+        return;
+      }
+      if (mustRefuse) {
+        return socket.emit('waiting_room_rejected', { reason: 'La réunion est verrouillée.' });
+      }
+
+      upsertWaitingParticipant(meetingId, {
+        socketId: socket.id,
+        email: participantEmail,
+        displayName: participantName,
+        joinedAt: new Date().toISOString(),
+        attempts: waitAttempts,
+        message: String(message || '').trim().slice(0, 160),
+      });
+      socket.data.meetingId    = meetingId;
+      socket.data.meetingEmail = participantEmail;
+      socket.data.displayName  = participantName;
+      socket.data.waiting      = true;
+      setRejoinState(meetingId, participantEmail, 'waiting');
+      socket.emit('waiting_room_entered', cleanWaitingEntry(waitingRooms.get(meetingId).get(socket.id)));
+      const waitEntry = cleanWaitingEntry(waitingRooms.get(meetingId).get(socket.id));
+      socket.to(room).emit('waiting_room_knock', waitEntry);
+      emitWaitingRoomList(io, meetingId);
+    });
+
+    // L'hôte approuve un participant
+    socket.on('waiting_room_admit', ({ meetingId, targetSocketId }) => {
+      const room    = `meeting:${meetingId}`;
+      const waiting = waitingRooms.get(meetingId);
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent gérer la salle d'attente." });
+      if (!waiting?.has(targetSocketId)) return;
+
+      const participant = cleanWaitingEntry(waiting.get(targetSocketId));
+      waiting.delete(targetSocketId);
+
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket) return;
+
+      targetSocket.data.waiting = false;
+      forceCleanupParticipant(io, meetingId, targetSocket, 'readmit');
+
+      // Admettre le participant — on appelle admitParticipant sur son socket
+      const pEmail = String(participant.email || '').trim().toLowerCase();
+      const pName  = participant.displayName;
+
+      targetSocket.join(room);
+      targetSocket.data.meetingId    = meetingId;
+      targetSocket.data.meetingEmail = pEmail;
+      targetSocket.data.displayName  = pName;
+      targetSocket.data.isCatalyst   = getMeetingCatalystSet(meetingId).has(pEmail);
+      touchParticipantStat(meetingId, targetSocket);
+
+      if (!approvedParticipants.has(meetingId)) approvedParticipants.set(meetingId, new Set());
+      approvedParticipants.get(meetingId).add(pEmail);
+
+      // Notifier les autres dans la salle
+      targetSocket.to(room).emit('meeting_peer_joined', { socketId: targetSocketId, email: pEmail, displayName: pName, isSharing: !!targetSocket.data.isSharing, isCatalyst: !!targetSocket.data.isCatalyst });
+
+      // Envoyer la liste des pairs au nouveau participant
+      const roomSockets = io.sockets.adapter.rooms.get(room);
+      const peers = [];
+      if (roomSockets) {
+        roomSockets.forEach(sid => {
+          if (sid === targetSocketId) return;
+          const s = io.sockets.sockets.get(sid);
+          if (s && !s.data.waiting) peers.push({ socketId: sid, email: s.data.meetingEmail || '', displayName: s.data.displayName || '', isSharing: s.data.isSharing || false, isCatalyst: !!s.data.isCatalyst });
+        });
+      }
+      const permissions = getParticipantPermissions(meetingId, pEmail);
+      targetSocket.emit('meeting_peers_list', { peers, permissions, rejoinState: 'active' });
+      targetSocket.emit('meeting_permissions_sync', { permissions, targetEmail: pEmail, socketId: targetSocket.id, mine: true });
+      const notes = meetingNotes.get(meetingId);
+      if (notes?.content) targetSocket.emit('notes_state', { content: notes.content, revision: notes.revision });
+      getOrLoadMeetingChatHistory(meetingId).then(history => { if (history.length) targetSocket.emit('meeting_chat_history', { messages: history }); }).catch(() => {});
+
+      // Envoyer l'état du tableau blanc
+      const wbStateAdmit = wbStates.get(meetingId);
+      if (wbStateAdmit) setTimeout(() => targetSocket.emit('wb_state', wbStateAdmit), 800);
+      emitMeetingTimerSync(io, meetingId, targetSocket);
+      emitParticipationStats(io, meetingId);
+      if (targetSocket.data.isCatalyst) setTimeout(() => syncCatalystRole(io, meetingId, targetSocket, true), 250);
+
+      // Confirmer à l'hôte que c'est admis
+      setRejoinState(meetingId, pEmail, 'active');
+      addAdminLog(io, meetingId, socket, 'admitted', pName, participant.message ? `Message: ${participant.message}` : '');
+      socket.emit('waiting_room_admitted', { socketId: targetSocketId, displayName: pName });
+      emitWaitingRoomList(io, meetingId);
+    });
+
+    // L'hôte rejette un participant
+    socket.on('waiting_room_reject', ({ meetingId, targetSocketId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent gérer la salle d'attente." });
+      const waiting = waitingRooms.get(meetingId);
+      if (waiting) waiting.delete(targetSocketId);
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      const targetEmail = targetSocket?.data?.meetingEmail || '';
+      if (targetEmail) setRejoinState(meetingId, targetEmail, 'removed');
+      if (targetSocket) targetSocket.emit('waiting_room_rejected');
+      addAdminLog(io, meetingId, socket, 'rejected_waiting', targetSocket?.data?.displayName || targetSocketId, '');
+      emitWaitingRoomList(io, meetingId);
+    });
+
+    socket.on('meeting_admin_waiting', ({ meetingId, targetSocketId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket || targetSocket.data.meetingId !== meetingId || targetSocket.data.isHost) return;
+      const waiting = waitingRooms.get(meetingId) || new Map();
+      waitingRooms.set(meetingId, waiting);
+      const entry = cleanWaitingEntry({ socketId: targetSocket.id, email: targetSocket.data.meetingEmail || '', displayName: targetSocket.data.displayName || 'Participant', joinedAt: new Date().toISOString(), attempts: 1, message: '' });
+      waiting.set(targetSocket.id, entry);
+      if (approvedParticipants.has(meetingId)) approvedParticipants.get(meetingId).delete(entry.email);
+      removeSocketFromMeeting(io, targetSocket, meetingId);
+      targetSocket.data.waiting = true;
+      setRejoinState(meetingId, entry.email, 'waiting');
+      targetSocket.emit('meeting_waiting_moved', { reason: "L'administrateur vous a déplacé en salle d'attente." });
+      addAdminLog(io, meetingId, socket, 'moved_to_waiting', entry.displayName, '');
+      emitWaitingRoomList(io, meetingId);
+    });
+
+    socket.on('meeting_admin_remove', ({ meetingId, targetSocketId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket || targetSocket.data.meetingId !== meetingId || targetSocket.data.isHost) return;
+      const email = targetSocket.data.meetingEmail || '';
+      if (approvedParticipants.has(meetingId)) approvedParticipants.get(meetingId).delete(email);
+      setRejoinState(meetingId, email, 'removed');
+      removeSocketFromMeeting(io, targetSocket, meetingId);
+      targetSocket.emit('meeting_removed', { reason: "L'administrateur vous a retiré de la réunion." });
+      addAdminLog(io, meetingId, socket, 'removed', targetSocket.data.displayName || email, '');
+    });
+
+    socket.on('meeting_admin_ban', ({ meetingId, targetSocketId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket || targetSocket.data.meetingId !== meetingId || targetSocket.data.isHost) return;
+      const identity = getSocketIdentity(targetSocket, targetSocket.data.meetingEmail || '');
+      addMeetingBan(meetingId, identity);
+      if (approvedParticipants.has(meetingId)) approvedParticipants.get(meetingId).delete(identity.email);
+      setRejoinState(meetingId, identity.email, 'banned');
+      removeSocketFromMeeting(io, targetSocket, meetingId);
+      targetSocket.emit('meeting_banned', { reason: "L'administrateur vous a banni de la réunion." });
+      addAdminLog(io, meetingId, socket, 'banned', targetSocket.data.displayName || identity.email, '');
+    });
+
+
+    socket.on('meeting_admin_lock', ({ meetingId, locked, mode }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const state = setMeetingLock(meetingId, locked, mode);
+      io.to(`meeting:${meetingId}`).emit('meeting_lock_state', state);
+      addAdminLog(io, meetingId, socket, state.locked ? 'meeting_locked' : 'meeting_unlocked', '', state.mode);
+    });
+
+    socket.on('meeting_admin_permissions', ({ meetingId, targetSocketId, patch }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket || targetSocket.data.meetingId !== meetingId || targetSocket.data.isHost) return;
+      const email = String(targetSocket.data.meetingEmail || '').trim().toLowerCase();
+      const permissions = setParticipantPermissions(meetingId, email, patch || {});
+      targetSocket.emit('meeting_permissions_sync', { permissions, targetEmail: email, socketId: targetSocket.id, mine: true });
+      targetSocket.to(`meeting:${meetingId}`).emit('meeting_permissions_sync', { permissions, targetEmail: email, socketId: targetSocket.id, mine: false });
+      if (permissions.forceMuted) io.to(targetSocket.id).emit('host_mute', { forced: true });
+      if (!permissions.canUseCamera) io.to(targetSocket.id).emit('meeting_disable_camera');
+      if (!permissions.canShareScreen) io.to(targetSocket.id).emit('meeting_disable_screen_share');
+      addAdminLog(io, meetingId, socket, 'permissions_updated', targetSocket.data.displayName || email, Object.keys(patch || {}).join(', '));
+    });
+
+    socket.on('meeting_admin_mute_all', ({ meetingId, locked }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const roomSockets = io.sockets.adapter.rooms.get(`meeting:${meetingId}`) || [];
+      Array.from(roomSockets).forEach(sid => {
+        const s = io.sockets.sockets.get(sid);
+        if (!s || s.id === socket.id || s.data?.isHost) return;
+        const email = String(s.data?.meetingEmail || '').trim().toLowerCase();
+        const permissions = setParticipantPermissions(meetingId, email, { forceMuted: true, canUnmute: !locked });
+        s.emit('meeting_permissions_sync', { permissions, targetEmail: email, socketId: s.id, mine: true });
+        s.emit('host_mute', { forced: true });
+      });
+      io.to(`meeting:${meetingId}`).emit('meeting_admin_mute_all_done', { locked: !!locked });
+      addAdminLog(io, meetingId, socket, 'mute_all', '', locked ? 'locked' : 'simple');
+    });
+
+    socket.on('meeting_admin_allow_speak', ({ meetingId, targetSocketId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket) return;
+      targetSocket.emit('meeting_allow_to_speak', { by: socket.data.displayName || socket.data.meetingEmail || 'Admin' });
+      addAdminLog(io, meetingId, socket, 'allowed_to_speak', targetSocket.data.displayName || targetSocket.data.meetingEmail, '');
+    });
+
+    socket.on('meeting_admin_temp_expel', ({ meetingId, targetSocketId, durationMinutes, untilEnd, manualApproval }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket || targetSocket.data.meetingId !== meetingId || targetSocket.data.isHost) return;
+      const identity = getSocketIdentity(targetSocket, targetSocket.data.meetingEmail || '');
+      const entry = addTempExpulsion(meetingId, identity, { until: untilEnd ? 'end' : (Date.now() + Math.max(1, parseInt(durationMinutes || 10, 10)) * 60000), mode: untilEnd ? 'until_end' : 'temporary', manual: !!manualApproval });
+      if (approvedParticipants.has(meetingId)) approvedParticipants.get(meetingId).delete(identity.email);
+      setRejoinState(meetingId, identity.email, 'expelled');
+      removeSocketFromMeeting(io, targetSocket, meetingId);
+      targetSocket.emit('meeting_temp_expelled', { until: entry.until, mode: entry.mode, manual: entry.manual });
+      addAdminLog(io, meetingId, socket, 'temp_expelled', targetSocket.data.displayName || identity.email, entry.manual ? 'manual approval' : String(entry.until));
+    });
+
+    socket.on('meeting_admin_log_get', ({ meetingId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return;
+      socket.emit('meeting_admin_log_sync', { logs: getMeetingAdminLog(meetingId) });
+      socket.emit('meeting_lock_state', getMeetingLock(meetingId));
+    });
+
+    socket.on('meeting_role_set', ({ meetingId, targetSocketId, enabled }) => {
+      if (!socket.data.isHost) return socket.emit('meeting_role_error', { error: "Seul l'hôte peut attribuer les clés Catalyst." });
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket || targetSocket.data.meetingId !== meetingId) return socket.emit('meeting_role_error', { error: 'Participant introuvable.' });
+      if (targetSocket.data.isHost) return socket.emit('meeting_role_error', { error: "L'hôte possède déjà tous les droits." });
+      const set = getMeetingCatalystSet(meetingId);
+      if (enabled) set.add(targetSocket.data.meetingEmail);
+      else set.delete(targetSocket.data.meetingEmail);
+      syncCatalystRole(io, meetingId, targetSocket, !!enabled);
+      emitParticipationStats(io, meetingId);
+      socket.emit('meeting_role_sync', {
+        socketId: targetSocket.id,
+        email: targetSocket.data.meetingEmail || '',
+        displayName: targetSocket.data.displayName || '',
+        role: 'catalyst',
+        enabled: !!enabled,
+        mine: false,
+      });
+      addAdminLog(io, meetingId, socket, enabled ? 'catalyst_granted' : 'catalyst_removed', targetSocket.data.displayName || targetSocket.data.meetingEmail, '');
+    });
+
+    socket.on('meeting_leave', ({ meetingId }) => {
+      const room = `meeting:${meetingId}`;
+      socket.leave(room);
+      socket.to(room).emit('meeting_peer_left', { socketId: socket.id });
+    });
+
+    // Offre WebRTC
+    socket.on('meeting_offer', ({ to, offer }) => {
+      io.to(to).emit('meeting_offer', { from: socket.id, offer });
+    });
+
+    // Réponse WebRTC
+    socket.on('meeting_answer', ({ to, answer }) => {
+      io.to(to).emit('meeting_answer', { from: socket.id, answer });
+    });
+
+    // ICE candidate
+    socket.on('meeting_ice', ({ to, candidate }) => {
+      io.to(to).emit('meeting_ice', { from: socket.id, candidate });
+    });
+
+    // Lever la main
+    socket.on('meeting_hand_raise', ({ meetingId, raised }) => {
+      const room = `meeting:${meetingId}`;
+      const stat = touchParticipantStat(meetingId, socket);
+      if (raised) stat.handRaises = (stat.handRaises || 0) + 1;
+      emitParticipationStats(io, meetingId);
+      socket.to(room).emit('meeting_hand_raise', {
+        socketId: socket.id,
+        email: socket.data.meetingEmail,
+        displayName: socket.data.displayName,
+        raised,
+      });
+    });
+
+    // Statut micro/caméra
+    socket.on('meeting_media_state', ({ meetingId, mic, camera }) => {
+      const perms = getParticipantPermissions(meetingId, socket.data.meetingEmail || '');
+      const safeMic = perms.forceMuted ? false : !!mic;
+      const safeCam = perms.canUseCamera && !perms.readOnly ? !!camera : false;
+      const room = `meeting:${meetingId}`;
+      socket.to(room).emit('meeting_media_state', {
+        socketId: socket.id,
+        mic: safeMic, camera: safeCam,
+      });
+    });
+
+    socket.on('meeting_chat_upload_init', ({ meetingId, uploadId, fileName, fileType, totalChunks, fileSize }, ack) => {
+      try {
+        if (!meetingId || !uploadId || !fileName || !totalChunks) throw new Error('Paramètres upload manquants');
+        if ((fileSize || 0) > 15 * 1024 * 1024) throw new Error('Fichier trop volumineux (max 15 Mo)');
+        meetingUploadChunks.set(uploadId, {
+          meetingId,
+          originalname: fileName,
+          mimetype: fileType,
+          totalChunks,
+          fileSize: fileSize || 0,
+          socketId: socket.id,
+          received: 0,
+          chunks: new Array(totalChunks),
+        });
+        if (typeof ack === 'function') ack({ ok: true });
+      } catch (e) {
+        if (typeof ack === 'function') ack({ ok: false, error: e.message || "Impossible de préparer l'upload" });
+      }
+    });
+
+    socket.on('meeting_chat_upload_chunk', ({ uploadId, index, data }, ack) => {
+      try {
+        const upload = meetingUploadChunks.get(uploadId);
+        if (!upload) throw new Error('Session upload introuvable');
+        if (index < 0 || index >= upload.totalChunks) throw new Error('Chunk invalide');
+        if (!data) throw new Error('Chunk vide');
+        if (!upload.chunks[index]) upload.received++;
+        upload.chunks[index] = Buffer.from(data, 'base64');
+        if (typeof ack === 'function') ack({ ok: true, received: upload.received, totalChunks: upload.totalChunks });
+      } catch (e) {
+        if (typeof ack === 'function') ack({ ok: false, error: e.message || 'Chunk refusé' });
+      }
+    });
+
+    socket.on('meeting_chat_upload_complete', ({ uploadId }, ack) => {
+      try {
+        const upload = meetingUploadChunks.get(uploadId);
+        if (!upload) throw new Error('Session upload introuvable');
+        const missing = upload.chunks.some(chunk => !chunk);
+        if (missing) throw new Error('Upload incomplet');
+        const file = finalizeMeetingChunkUpload(upload);
+        meetingUploadChunks.delete(uploadId);
+        if (typeof ack === 'function') ack({ ok: true, file });
+      } catch (e) {
+        meetingUploadChunks.delete(uploadId);
+        if (typeof ack === 'function') ack({ ok: false, error: e.message || 'Erreur de finalisation upload', code: e.code || null });
+      }
+    });
+
+    // Chat en réunion (texte + fichiers)
+    socket.on('meeting_chat', async ({ meetingId, text, anonymous, fileName, fileSize, fileType, fileUrl, fileId, fileData }) => {
+      const perms = getParticipantPermissions(meetingId, socket.data.meetingEmail || '');
+      if (!perms.canChat || perms.readOnly) return socket.emit('meeting_permission_denied', { feature: 'chat' });
+      const room = `meeting:${meetingId}`;
+      const msg  = {
+        socketId:    socket.id,
+        email:       socket.data.meetingEmail,
+        displayName: anonymous ? 'Un participant' : socket.data.displayName,
+        anonymous:   !!anonymous,
+        text:        text     || null,
+        fileName:    fileName || null,
+        fileSize:    fileSize || null,
+        fileType:    fileType || null,
+        fileUrl:     fileUrl  || null,
+        fileId:      fileId   || null,
+        fileData:    fileData || null,
+        at: new Date().toISOString(),
+      };
+      try {
+        msg.id = await persistMeetingChatMessage(meetingId, msg);
+      } catch (e) {
+        logger.app(socket.data.meetingEmail || 'anonymous', 'ERROR', `meeting_chat persist: ${e.message}`);
+      }
+      let hist = meetingChatHistory.get(meetingId);
+      if (!hist) {
+        hist = await loadMeetingChatHistory(meetingId).catch(() => []);
+        meetingChatHistory.set(meetingId, hist);
+      }
+      hist.push(msg);
+      if (hist.length > 200) hist.shift();
+      io.to(room).emit('meeting_chat', msg);
+    });
+
+    // Fin de réunion par l'hôte
+
+    socket.on('meeting_extend', ({ meetingId, minutes }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent prolonger la réunion." });
+      const extra = parseInt(minutes, 10);
+      if (![10,15,30].includes(extra)) return;
+      const session = ensureMeetingSession(io, meetingId);
+      session.expiresAt += extra * 60 * 1000;
+      session.promptForExpiresAt = null;
+      io.to(`meeting:${meetingId}`).emit('meeting_extended', { minutes: extra, expiresAt: new Date(session.expiresAt).toISOString() });
+      emitMeetingTimerSync(io, meetingId);
+    });
+
+    socket.on('meeting_end', ({ meetingId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent terminer la réunion." });
+      const room = `meeting:${meetingId}`;
+      io.to(room).emit('meeting_ended');
+      const session = meetingSessions.get(meetingId); if (session?.ticker) clearInterval(session.ticker); meetingSessions.delete(meetingId);
+      // Rejeter tous ceux en salle d'attente
+      const waiting = waitingRooms.get(meetingId);
+      if (waiting) {
+        waiting.forEach((_, sid) => {
+          const s = io.sockets.sockets.get(sid);
+          if (s) s.emit('waiting_room_rejected');
+        });
+        waitingRooms.delete(meetingId);
+      }
+      approvedParticipants.delete(meetingId);
+      meetingChatHistory.delete(meetingId);
+      meetingNotes.delete(meetingId);
+      meetingLocks.delete(meetingId);
+      meetingParticipantPermissions.delete(meetingId);
+      meetingTempExpulsions.delete(meetingId);
+      meetingAdminLogs.delete(meetingId);
+      meetingRejoinState.delete(meetingId);
+    });
+
+    // Réaction emoji
+    socket.on('meeting_reaction', ({ meetingId, emoji }) => {
+      const room = `meeting:${meetingId}`;
+      socket.to(room).emit('meeting_reaction', {
+        socketId:    socket.id,
+        displayName: socket.data.displayName,
+        emoji,
+      });
+    });
+
+    // Partage d'écran — stocker l'état + notifier les pairs
+    socket.on('meeting_screen_share', ({ meetingId, sharing }) => {
+      const perms = getParticipantPermissions(meetingId, socket.data.meetingEmail || '');
+      if (sharing && (!perms.canShareScreen || perms.readOnly)) return socket.emit('meeting_permission_denied', { feature: 'screen' });
+      socket.data.isSharing = sharing;
+      const room = `meeting:${meetingId}`;
+      socket.to(room).emit('meeting_screen_share', { socketId: socket.id, sharing });
+    });
+
+    // ── Notes collaboratives ──────────────────────────────────────────────────
+    socket.on('notes_update', ({ meetingId, content: noteContent, revision, author, cursor }) => {
+      // Stocker la dernière version
+      meetingNotes.set(meetingId, { content: noteContent, revision, updatedAt: Date.now() });
+      // Diffuser à tous les autres participants
+      socket.to(`meeting:${meetingId}`).emit('notes_update', {
+        content:  noteContent,
+        revision,
+        author,
+        cursor,
+      });
+      // Confirmation à l'expéditeur
+      socket.emit('notes_ack');
+    });
+
+    // ── Minuteur de parole ───────────────────────────────────────────────────
+    socket.on('speech_start', ({ meetingId }) => {
+      const stat = touchParticipantStat(meetingId, socket);
+      if (!stat.speakingSince) { stat.speakingSince = Date.now(); stat.speechTurns = (stat.speechTurns || 0) + 1; }
+      emitParticipationStats(io, meetingId);
+      socket.to(`meeting:${meetingId}`).emit('speech_start', { socketId: socket.id });
+    });
+    socket.on('speech_stop', ({ meetingId }) => {
+      const stat = touchParticipantStat(meetingId, socket);
+      if (stat.speakingSince) { stat.speakingMs = (stat.speakingMs || 0) + (Date.now() - stat.speakingSince); stat.speakingSince = null; }
+      emitParticipationStats(io, meetingId);
+      socket.to(`meeting:${meetingId}`).emit('speech_stop', { socketId: socket.id });
+    });
+    socket.on('speech_limit', ({ meetingId, limit }) => {
+      socket.to(`meeting:${meetingId}`).emit('speech_limit', { limit });
+    });
+
+    // ── Sondage ─────────────────────────────────────────────────────────────
+    socket.on('poll_launch', ({ meetingId, question, options }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('poll_error', { error: "Seuls l'hôte et les Catalyst peuvent lancer un sondage." });
+      const room = `meeting:${meetingId}`;
+      if (!socket.data?.isHost) {
+        socket.emit('poll_error', { action: 'launch', error: "Seul l'hôte peut lancer un sondage." });
+        return;
+      }
+      const activePoll = meetingPolls.get(meetingId);
+      if (activePoll && !activePoll.closed) {
+        socket.emit('poll_error', { action: 'launch', error: 'Un sondage est déjà en cours.' });
+        socket.emit('poll_sync', getActivePollSnapshot(activePoll));
+        return;
+      }
+
+      const roomSockets = Array.from(io.sockets.adapter.rooms.get(room) || [])
+        .map(sid => io.sockets.sockets.get(sid))
+        .filter(Boolean);
+      const participantIds = roomSockets
+        .filter(s => !s.data?.isHost)
+        .map(s => s.id);
+
+      const poll = {
+        id: Date.now().toString(),
+        question,
+        options,
+        votes: new Array(options.length).fill(0),
+        voters: new Set(),
+        participantIds,
+        expectedVotes: participantIds.length,
+        allAnswered: false,
+        closed: false,
+        hostSocketId: socket.id,
+      };
+
+      meetingPolls.set(meetingId, poll);
+      roomSockets.forEach(s => { s.data.activePollId = poll.id; });
+      io.to(room).emit('poll_launched', getActivePollSnapshot(poll));
+    });
+
+    socket.on('poll_vote', ({ meetingId, pollId, optionIndex }) => {
+      const room = `meeting:${meetingId}`;
+      const s = meetingPolls.get(meetingId);
+      if (!s || s.id !== pollId || s.closed) return;
+      if (!Array.isArray(s.options) || optionIndex < 0 || optionIndex >= s.options.length) return;
+      if (socket.data?.isHost) return;
+      if (s.voters.has(socket.id)) return;
+
+      s.voters.add(socket.id);
+      s.votes[optionIndex] = (s.votes[optionIndex] || 0) + 1;
+
+      const receivedVotes = s.voters.size;
+      const expectedVotes = s.expectedVotes || 0;
+      const allAnswered = expectedVotes > 0 && receivedVotes >= expectedVotes;
+      s.allAnswered = allAnswered;
+
+      io.to(room).emit('poll_update', getActivePollSnapshot(s));
+
+      if (allAnswered) {
+        const hostSocket = io.sockets.sockets.get(s.hostSocketId) ||
+          Array.from(io.sockets.adapter.rooms.get(room) || [])
+            .map(sid => io.sockets.sockets.get(sid))
+            .find(sock => sock?.data?.isHost);
+        if (hostSocket) hostSocket.emit('poll_all_answered', getActivePollSnapshot(s));
+      }
+    });
+
+    socket.on('poll_end', ({ meetingId, pollId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('poll_error', { error: "Seuls l'hôte et les Catalyst peuvent terminer un sondage." });
+      const room = `meeting:${meetingId}`;
+      const s = meetingPolls.get(meetingId);
+      if (!socket.data?.isHost) {
+        socket.emit('poll_error', { action: 'end', error: "Seul l'hôte peut terminer le sondage." });
+        return;
+      }
+      if (!s || s.closed) {
+        socket.emit('poll_error', { action: 'end', error: 'Aucun sondage actif à terminer.' });
+        return;
+      }
+      if (pollId && s.id !== pollId) {
+        socket.emit('poll_error', { action: 'end', error: "Ce sondage n'est plus actif." });
+        socket.emit('poll_sync', getActivePollSnapshot(s));
+        return;
+      }
+
+      s.closed = true;
+      io.to(room).emit('poll_results', getActivePollSnapshot(s));
+      meetingPolls.delete(meetingId);
+      io.sockets.adapter.rooms.get(room)?.forEach(sid => {
+        const sock = io.sockets.sockets.get(sid);
+        if (sock) sock.data.activePollId = null;
+      });
+    });
+
+    // ── Statut enregistrement ───────────────────────────────────────────────
+    socket.on('recording_status', ({ meetingId, active }) => {
+      const room = `meeting:${meetingId}`;
+      const payload = {
+        socketId: socket.id,
+        displayName: socket.data?.displayName || socket.data?.email || 'Un participant',
+        active: !!active,
+      };
+      io.to(room).emit('recording_status', payload);
+    });
+
+    // ── Tableau blanc ────────────────────────────────────────────────────────
+    socket.on('wb_draw',    ({ meetingId, ...data }) => { socket.to(`meeting:${meetingId}`).emit('wb_draw',    data); });
+    socket.on('wb_shape',   ({ meetingId, ...data }) => { socket.to(`meeting:${meetingId}`).emit('wb_shape',   data); });
+    socket.on('wb_text',    ({ meetingId, ...data }) => { socket.to(`meeting:${meetingId}`).emit('wb_text',    data); });
+    socket.on('wb_sticker', ({ meetingId, ...data }) => { socket.to(`meeting:${meetingId}`).emit('wb_sticker', data); });
+    socket.on('wb_clear',   ({ meetingId })          => {
+      socket.to(`meeting:${meetingId}`).emit('wb_clear');
+      wbStates.delete(meetingId);
+    });
+    // wb_sync : relayer ET mémoriser l'état pour les late joiners
+    socket.on('wb_sync', ({ meetingId, objects, dataUrl }) => {
+      if (objects)        wbStates.set(meetingId, { objects });
+      else if (dataUrl)   wbStates.set(meetingId, { dataUrl });
+      const payload = objects ? { objects } : { dataUrl };
+      socket.to(`meeting:${meetingId}`).emit('wb_sync', payload);
+    });
+    // Un nouvel arrivant demande l'état actuel du tableau
+    socket.on('wb_request_state', ({ meetingId }) => {
+      const state = wbStates.get(meetingId);
+      if (state) socket.emit('wb_state', state);
+    });
+
+    // ── Popcorn ─────────────────────────────────────────────────────────────────
+    socket.on('popcorn_launch', ({ meetingId, targetSocketId, targetName, question, duration }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent lancer le mode Popcorn." });
+      const room = `meeting:${meetingId}`;
+      if (targetSocketId && targetSocketId !== 'all') {
+        const targetSock = io.sockets.sockets.get(targetSocketId);
+        if (!targetSock || targetSock.data.meetingId !== meetingId) return socket.emit('meeting_role_error', { error: 'Participant Popcorn introuvable.' });
+        if (socketHasControlPower(meetingId, targetSock)) return socket.emit('meeting_role_error', { error: "Les animateurs ne peuvent pas être ciblés en mode Popcorn." });
+      }
+      io.to(room).emit('popcorn_start', { targetName, targetSocketId, question, duration });
+    });
+    socket.on('popcorn_answer', ({ meetingId, answer }) => {
+      const room = `meeting:${meetingId}`;
+      const name = socket.data.displayName || 'Quelqu\'un';
+      io.to(room).emit('popcorn_answer', { answer, targetName: name });
+    });
+    socket.on('popcorn_timeout', ({ meetingId, targetName }) => {
+      const room = `meeting:${meetingId}`;
+      socket.to(room).emit('popcorn_timeout', { targetName });
+    });
+
+    // ── Quiz ─────────────────────────────────────────────────────────────────────
+
+    socket.on('quiz_launch', ({ meetingId, question, options, correctIdx, duration, points, isBingo, speedBonus, hostId }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent lancer un quiz." });
+      console.log('[Quiz] Reçu quiz_launch, room:', meetingId, 'options:', options?.length);
+      const room   = `meeting:${meetingId}`;
+      const quizId = 'q_' + Date.now();
+      quizVotes.set(quizId, {
+        votes:      new Array(options.length).fill(0),
+        voters:     {},
+        voterNames: {},
+        options, correctIdx, question,
+        points:     points || 1,
+        isBingo:    isBingo || false,
+        speedBonus: speedBonus || false,
+        scores:     {},
+        meetingId,
+      });
+      io.to(room).emit('quiz_question', { id: quizId, question, options, duration, points: points||1, isBingo: isBingo||false, correctIdx: -1 });
+      // Révéler après la durée
+      setTimeout(() => {
+        const data = quizVotes.get(quizId);
+        if (!data) return;
+        // Classement
+        const scores = Object.entries(data.scores)
+          .map(([name, score]) => ({ name, score }))
+          .sort((a,b) => b.score - a.score);
+        // Leaderboard cumulé
+        const lb = quizLeaderboard.get(meetingId) || {};
+        const leaderboard = Object.entries(lb)
+          .map(([name, total]) => ({ name, total }))
+          .sort((a,b) => b.total - a.total);
+        io.to(room).emit('quiz_results', {
+          question:   data.question,
+          options:    data.options,
+          votes:      data.votes,
+          voterNames: data.voterNames,
+          correctIdx: data.correctIdx,
+          scores,
+          leaderboard,
+          points:     data.points,
+        });
+        quizVotes.delete(quizId);
+      }, duration * 1000 + 500);
+    });
+
+    socket.on('quiz_vote', ({ meetingId, optionIdx, displayName }) => {
+      for (const [qid, data] of quizVotes.entries()) {
+        if (data.meetingId !== meetingId) continue;
+        if (socketHasControlPower(meetingId, socket)) return;
+        if (data.voters[socket.id] !== undefined) return; // déjà voté
+        data.voters[socket.id] = optionIdx;
+        // Stocker le nom du votant par option pour l'affichage
+        if (!data.voterNames[optionIdx]) data.voterNames[optionIdx] = [];
+        data.voterNames[optionIdx].push(displayName || 'Quelqu\'un');
+        if (data.votes[optionIdx] !== undefined) data.votes[optionIdx]++;
+        // Points définis par l'hôte + bonus rapidité optionnel
+        if (optionIdx === data.correctIdx) {
+          let earned = data.points;
+          if (data.speedBonus) {
+            // Bonus seulement si activé : 1er=+3, 2ème=+2, 3ème=+1, ensuite +0
+            const nCorrect = Object.values(data.voters).filter(v => v === data.correctIdx).length;
+            earned += Math.max(0, 4 - nCorrect); // 3,2,1,0
+          }
+          data.scores[displayName] = (data.scores[displayName] || 0) + earned;
+          if (!quizLeaderboard.has(data.meetingId)) quizLeaderboard.set(data.meetingId, {});
+          const lb = quizLeaderboard.get(data.meetingId);
+          lb[displayName] = (lb[displayName] || 0) + earned;
+        }
+        const total = Object.keys(data.voters).length;
+        io.to(`meeting:${meetingId}`).emit('quiz_vote_count', { total });
+        break;
+      }
+    });
+
+    // Restaurer le leaderboard depuis le client hôte (reconnexion)
+    socket.on('quiz_restore_leaderboard', ({ meetingId, leaderboard }) => {
+      if (!leaderboard?.length) return;
+      // Mettre à jour le leaderboard serveur
+      if (!quizLeaderboard.has(meetingId)) quizLeaderboard.set(meetingId, {});
+      const lb = quizLeaderboard.get(meetingId);
+      leaderboard.forEach(({ name, total }) => {
+        // Ne pas écraser si le serveur a des données plus récentes
+        if (!lb[name] || lb[name] < total) lb[name] = total;
+      });
+      // Diffuser aux autres participants (pas à l'émetteur)
+      socket.to(`meeting:${meetingId}`).emit('quiz_leaderboard_sync', { leaderboard });
+    });
+
+    // Applaudir un participant
+    socket.on('quiz_applaud', ({ meetingId, targetName }) => {
+      io.to(`meeting:${meetingId}`).emit('quiz_applaud', {
+        targetName,
+        fromName: socket.data.displayName || 'L\'hôte',
+      });
+    });
+
+    // ── Minuteur de parole ──────────────────────────────────────────────────────
+    socket.on('speak_state', ({ meetingId, speaking }) => {
+      socket.to(`meeting:${meetingId}`).emit('speak_state', {
+        socketId: socket.id, speaking
+      });
+    });
+    socket.on('speak_limit', ({ meetingId, limitSeconds }) => {
+      socket.to(`meeting:${meetingId}`).emit('speak_limit', { limitSeconds });
+    });
+    socket.on('speak_reset', ({ meetingId, targetSocket }) => {
+      io.to(targetSocket).emit('speak_reset', { socketId: targetSocket });
+    });
+
+    // Hôte coupe/réactive le micro d'un participant
+    socket.on('host_mute', ({ meetingId, targetSocket }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent couper un micro." });
+      const target = io.sockets.sockets.get(targetSocket);
+      if (target?.data?.meetingEmail) setParticipantPermissions(meetingId, target.data.meetingEmail, { forceMuted: true, canUnmute: false });
+      io.to(targetSocket).emit('host_mute', { forced: true });
+      addAdminLog(io, meetingId, socket, 'muted', target?.data?.displayName || targetSocket, '');
+    });
+
+    socket.on('host_unmute', ({ meetingId, targetSocket }) => {
+      if (!socketHasControlPower(meetingId, socket)) return socket.emit('meeting_role_error', { error: "Seuls l'hôte et les Catalyst peuvent réactiver un micro." });
+      const target = io.sockets.sockets.get(targetSocket);
+      if (target?.data?.meetingEmail) {
+        const permissions = setParticipantPermissions(meetingId, target.data.meetingEmail, { forceMuted: false, canUnmute: true });
+        target.emit('meeting_permissions_sync', { permissions, targetEmail: target.data.meetingEmail, socketId: target.id, mine: true });
+      }
+      io.to(targetSocket).emit('host_unmute');
+      addAdminLog(io, meetingId, socket, 'unmuted', target?.data?.displayName || targetSocket, '');
+    });
+  });
+}
+
+module.exports = { initSocket };

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= title %></title>
+  <meta name="csrf-token" content="<%= csrfToken || '' %>">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; font-family: 'Sora', sans-serif; }
+    body { margin: 0; background: #060d1a; color: #f1f5f9; min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 20px; }
+    .card { width:100%; max-width: 420px; background: #0f172a; border: 1px solid rgba(3,92,128,.18); border-radius: 18px; padding: 30px; text-align: center; }
+    h1 { font-size: 19px; margin: 0 0 8px; }
+    p.desc { font-size: 12px; color: #94a3b8; line-height: 1.6; margin: 0 0 20px; }
+    .qr-box { width: 240px; height: 240px; margin: 0 auto 18px; background: #fff; border-radius: 14px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .qr-box img { width: 100%; height: 100%; }
+    .timer { font-size: 12px; color: #f59e0b; font-weight: 700; margin-bottom: 14px; }
+    .status { margin-top: 16px; font-size: 13px; padding: 12px; border-radius: 10px; }
+    .status.wait { background: rgba(255,255,255,.04); color: #94a3b8; }
+    .status.ok { background: rgba(34,197,94,.12); color: #86efac; }
+    .status.denied { background: rgba(248,113,113,.1); color: #fca5a5; }
+    .spinner { display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,.2); border-top-color:#7dd3fc; border-radius:50%; animation: spin 0.8s linear infinite; margin-right:8px; vertical-align:-2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Connecter cet appareil</h1>
+    <p class="desc">
+      Depuis un appareil déjà connecté à ton compte, ouvre <strong>Connexion rapide</strong>,
+      puis scanne ce code (ou ouvre le lien) pour autoriser cet appareil-ci — sans mot de passe.
+    </p>
+    <div id="qr-container" class="qr-box"><span style="color:#333;font-size:12px;">Génération…</span></div>
+    <div class="timer" id="qc-timer"></div>
+    <div id="qc-status" class="status wait"><span class="spinner"></span>En attente d'approbation…</div>
+  </div>
+
+  <script>
+    (() => {
+      let currentToken = null, pollTimer = null, countdownTimer = null;
+
+      function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.content || '';
+      }
+
+      async function generate() {
+        clearInterval(pollTimer); clearInterval(countdownTimer);
+        const statusEl = document.getElementById('qc-status');
+        statusEl.className = 'status wait';
+        statusEl.innerHTML = '<span class="spinner"></span>En attente d\'approbation…';
+
+        const res = await fetch('/api/quick-connect/request', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': getCsrfToken() }
+        }).then(r => r.json());
+        if (!res.ok) { document.getElementById('qr-container').innerHTML = '<span style="color:#c00;font-size:11px;">Erreur</span>'; return; }
+
+        currentToken = res.token;
+        document.getElementById('qr-container').innerHTML = `<img src="${res.qrDataUrl}" alt="QR code">`;
+
+        startCountdown(new Date(res.expiresAt));
+        pollTimer = setInterval(checkStatus, 2000);
+      }
+
+      function startCountdown(expiresAt) {
+        const el = document.getElementById('qc-timer');
+        countdownTimer = setInterval(() => {
+          const s = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+          el.textContent = s > 0 ? `Expire dans ${s}s` : 'Expiré — régénération…';
+          if (s <= 0) { clearInterval(countdownTimer); generate(); }
+        }, 500);
+      }
+
+      async function checkStatus() {
+        if (!currentToken) return;
+        const res = await fetch('/api/quick-connect/status/' + currentToken).then(r => r.json());
+        const statusEl = document.getElementById('qc-status');
+
+        if (res.status === 'approved') {
+          clearInterval(pollTimer); clearInterval(countdownTimer);
+          statusEl.className = 'status ok';
+          statusEl.textContent = 'Approuvé — connexion en cours…';
+          const finalize = await fetch('/api/quick-connect/consume-approved', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
+            body: JSON.stringify({ token: currentToken })
+          }).then(r => r.json());
+          if (finalize.ok) {
+            window.location.href = finalize.redirect + (finalize.originDeviceId ? '?quickConnectOrigin=' + finalize.originDeviceId : '');
+          } else {
+            statusEl.className = 'status denied';
+            statusEl.textContent = finalize.error || 'Erreur lors de la connexion.';
+          }
+        } else if (res.status === 'denied') {
+          clearInterval(pollTimer); clearInterval(countdownTimer);
+          statusEl.className = 'status denied';
+          statusEl.textContent = 'Connexion refusée depuis l\'autre appareil.';
+        } else if (res.status === 'expired' || res.status === 'not_found') {
+          clearInterval(pollTimer); clearInterval(countdownTimer);
+          generate();
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', generate);
+    })();
+  </script>
+</body>
+</html>

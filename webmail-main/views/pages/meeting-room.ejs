@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="fr" id="meeting-html">
+<head>
+  <meta charset="UTF-8"/>
+  <script>
+    // Appliquer le thème avant le rendu pour éviter le flash
+    (function(){
+      var t = localStorage.getItem('ts_theme') || 'dark';
+      document.getElementById('meeting-html').setAttribute('data-theme', t);
+    })();
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title><%= title %></title>
+  <meta name="csrf-token" content="<%= csrfToken %>">
+  <meta name="vapid-public-key" content="<%= process.env.VAPID_PUBLIC_KEY || '' %>">
+  <link rel="icon" href="/favicon.ico"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;font-family:'Sora',sans-serif;}
+    :root,[data-theme="dark"]{
+      --bg:#060d1a;--bg2:#0c1526;--bg3:#0f1e35;
+      --accent:#035c80;--accent2:#8b5cf6;
+      --border:rgba(3,92,128,0.15);
+      --text1:#f1f5f9;--text2:#cbd5e1;--text3:#94a3b8;--muted:#475569;
+      --red:#f87171;--green:#22c55e;--yellow:#f59e0b;
+    }
+    [data-theme="light"]{
+      --bg:#f0f4f8;--bg2:#ffffff;--bg3:#f8fafc;
+      --accent:#035c80;--accent2:#8b5cf6;
+      --border:rgba(15,23,42,0.1);
+      --text1:#0f172a;--text2:#1e293b;--text3:#64748b;--muted:#94a3b8;
+      --red:#dc2626;--green:#16a34a;--yellow:#d97706;
+    }
+    /* ── Reset & base ── */
+    html{
+      height:100%;
+      /* iOS Safari : utiliser 100% de la hauteur visible */
+      height: -webkit-fill-available;
+    }
+    body{
+      height:100%;
+      height: -webkit-fill-available;
+      background:var(--bg);color:var(--text1);
+      overflow:hidden;
+      /* Empêcher le scroll-bounce iOS */
+      overscroll-behavior:none;
+    }
+    #room{background:var(--bg);}
+
+    /* ── LOBBY ── */
+    #lobby{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+      background:var(--bg);z-index:100;
+    }
+    .lobby-card{
+      width:480px;background:var(--bg2);border:1px solid var(--border);
+      border-radius:20px;overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.6);
+    }
+    .lobby-preview{
+      position:relative;height:240px;background:#000;
+      display:flex;align-items:center;justify-content:center;overflow:hidden;
+    }
+    .lobby-preview video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+    .lobby-cam-off{
+      position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+      background:#050a14;
+    }
+    .lobby-avatar{
+      width:72px;height:72px;border-radius:20px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      display:flex;align-items:center;justify-content:center;
+      font-size:26px;font-weight:800;color:white;
+    }
+    .lobby-controls{
+      position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+      display:flex;gap:10px;
+    }
+    .lctrl{
+      width:42px;height:42px;border-radius:50%;border:none;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+      transition:all .15s;
+    }
+    .lctrl.on {background:rgba(255,255,255,0.12);}
+    .lctrl.off{background:rgba(248,113,113,0.25);border:1px solid rgba(248,113,113,0.4);}
+    .lctrl svg{pointer-events:none;}
+    .lobby-body{padding:24px 28px 28px;}
+    .lobby-title{font-size:18px;font-weight:800;color:var(--text1);margin-bottom:4px;}
+    .lobby-sub  {font-size:13px;color:var(--muted);margin-bottom:22px;}
+    .lobby-name-row{display:flex;gap:10px;align-items:center;margin-bottom:18px;}
+    .lobby-name-inp{
+      flex:1;padding:10px 14px;border-radius:10px;border:1px solid var(--border);
+      background:var(--bg3);color:var(--text1);font-size:14px;font-family:'Sora',sans-serif;
+      outline:none;transition:border-color .2s;
+    }
+    .lobby-name-inp:focus{border-color:rgba(3,92,128,0.5);}
+    .btn-join{
+      width:100%;padding:13px;border-radius:12px;border:none;cursor:pointer;
+      font-size:15px;font-weight:700;color:white;
+      background:linear-gradient(135deg,var(--accent),#024a6a);
+      box-shadow:0 6px 24px rgba(3,92,128,0.35);transition:all .2s;
+    }
+    .btn-join:hover{transform:translateY(-1px);box-shadow:0 10px 32px rgba(3,92,128,0.45);}
+    .btn-join:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+    /* ── ROOM ── */
+    #room{
+      display:none;
+      flex-direction:column;
+      /* Hauteur viewport dynamique — s'adapte à iOS Safari avec barre d'adresse */
+      height:100vh;
+      height:100dvh;
+      max-height: -webkit-fill-available;
+      /* Grid pour garantir que la barre de contrôles est toujours visible */
+      display:none;
+      flex-direction:column;
+    }
+
+    /* Topbar réunion */
+    .meet-top{
+      height:48px;
+      background:var(--bg2);
+      border-bottom:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 14px;
+      flex-shrink:0;  /* NE JAMAIS réduire la topbar */
+      z-index:10;
+    }
+    .meet-top-left{display:flex;align-items:center;gap:12px;}
+    .meet-logo{
+      width:32px;height:32px;border-radius:9px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      display:flex;align-items:center;justify-content:center;
+    }
+    .meet-name{font-size:14px;font-weight:700;color:var(--text1);}
+    .meet-timer{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
+    .meet-top-right{display:flex;align-items:center;gap:8px;}
+    .meet-info-chip{
+      padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;
+      background:rgba(3,92,128,0.12);border:1px solid var(--border);color:var(--text3);
+      display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+    }
+    .meet-info-chip:hover{background:rgba(3,92,128,0.2);}
+
+    /* ── Grille vidéo ── */
+    .meet-body{
+      flex:1;
+      overflow:hidden;
+      display:flex;
+      gap:0;
+      min-height:0;
+      /* S'assurer que meet-body ne dépasse jamais l'espace disponible */
+      max-height:calc(100dvh - 48px - 64px); /* 100vh - topbar - barre contrôles */
+    }
+
+    /* Mode normal : grille CSS */
+    #video-grid{
+      flex:1;padding:6px;
+      display:grid;gap:6px;
+      overflow:hidden;min-height:0;
+    }
+
+    /* ── Mode focus (partage d'écran OU participant épinglé) ── */
+    #video-grid.focus-mode {
+      display:flex;
+      flex-direction:column;
+      padding:6px;
+      gap:6px;
+    }
+    /* Tuile principale (partageur d'écran ou épinglé) - remplit tout l'espace */
+    #video-grid.focus-mode .peer-tile.screen-share,
+    #video-grid.focus-mode .peer-tile.pinned {
+      flex:1;
+      min-height:0;
+      min-width:0;
+      border-radius:10px;
+      width:100%;
+    }
+    /* Rangée des miniatures en bas */
+    #video-grid.focus-mode .peer-tile:not(.screen-share):not(.pinned) {
+      flex-shrink:0;
+      height:120px;
+      width:auto;
+      aspect-ratio:16/9;
+      border-radius:10px;
+    }
+    /* Conteneur row pour les miniatures */
+    #thumbnails-row {
+      display:flex;
+      gap:8px;
+      flex-shrink:0;
+      overflow-x:auto;
+      overflow-y:hidden;
+      scrollbar-width:thin;
+      scrollbar-color:rgba(3,92,128,0.3) transparent;
+    }
+    #thumbnails-row::-webkit-scrollbar{height:3px;}
+    #thumbnails-row::-webkit-scrollbar-thumb{background:rgba(3,92,128,0.3);border-radius:2px;}
+
+    .peer-tile{
+      position:relative;border-radius:10px;overflow:hidden;
+      background:var(--bg2);border:1px solid rgba(255,255,255,0.06);
+      transition:border-color .2s;
+    }
+    /* La tuile video occupe exactement son espace */
+    .peer-tile, .peer-tile video {
+      width:100%;
+      height:100%;
+    }
+    .peer-tile.speaking{border-color:var(--accent);}
+    .peer-tile video{
+      width:100%;height:100%;object-fit:cover;
+      display:block;background:#000;
+    }
+    /* Partage d'écran : contain + même fond que la page */
+    .peer-tile.screen-share video{
+      object-fit:contain;
+      background:var(--bg);
+    }
+    #video-grid.focus-mode .peer-tile.screen-share {
+      border-radius:6px;
+    }
+    .peer-tile.cam-off video{display:none;}
+    .peer-avatar-tile{
+      position:absolute;inset:0;display:none;
+      align-items:center;justify-content:center;
+      background:linear-gradient(135deg,#0a1628,#0f2040);
+    }
+    .peer-tile.cam-off .peer-avatar-tile{display:flex;}
+    [data-theme="light"] .peer-tile.cam-off .peer-avatar-tile{
+      background:linear-gradient(135deg,#e2e8f0,#cbd5e1);
+    }
+    .peer-av{
+      width:64px;height:64px;border-radius:18px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      display:flex;align-items:center;justify-content:center;
+      font-size:22px;font-weight:800;color:white;
+    }
+    .peer-label{
+      position:absolute;bottom:10px;left:12px;right:12px;
+      display:flex;align-items:center;justify-content:space-between;
+    }
+    .host-mute-btn{
+      background:rgba(0,0,0,0.45);border:none;border-radius:50%;
+      width:22px;height:22px;cursor:pointer;flex-shrink:0;
+      display:flex;align-items:center;justify-content:center;
+      transition:background .15s;
+    }
+    .host-mute-btn:hover{background:rgba(248,113,113,0.7);}
+    .host-mute-btn.muted{background:rgba(248,113,113,0.6);}
+    .pin-btn.active-pin{background:rgba(3,92,128,0.85);}
+    .peer-name{
+      font-size:12px;font-weight:600;color:white;
+      background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);
+      padding:3px 10px;border-radius:20px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;
+    }
+    .peer-muted{
+      width:24px;height:24px;border-radius:50%;
+      background:rgba(248,113,113,0.85);
+      display:none;align-items:center;justify-content:center;
+      flex-shrink:0;
+    }
+    .peer-muted.show{display:flex;}
+    .peer-hand{
+      position:absolute;top:10px;right:10px;
+      font-size:22px;display:none;
+      filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+    }
+    .peer-hand.raised{display:block;animation:handPulse 1s ease infinite;}
+    @keyframes handPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+
+
+
+    /* Panel chat latéral */
+    /* ── Panneau latéral multi-onglets ── */
+    #side-panel{
+      width:300px;background:var(--bg2);border-left:1px solid var(--border);
+      display:none;flex-direction:column;flex-shrink:0;
+    }
+    #side-panel.open{display:flex;}
+    #admin-panel{
+      width:320px;background:var(--bg2);border-left:1px solid var(--border);
+      display:none;flex-direction:column;flex-shrink:0;min-width:0;
+    }
+    #admin-panel.open{display:flex;}
+    #admin-panel .panel-head{padding:10px 14px;border-bottom:1px solid var(--border);}
+    #participation-panel{
+      width:320px;background:var(--bg2);border-right:1px solid var(--border);
+      display:none;flex-direction:column;flex-shrink:0;min-width:0;
+    }
+    #participation-panel.open{display:flex;}
+    #participation-panel .panel-head{padding:10px 14px;border-bottom:1px solid var(--border);}
+    .meet-side-tabs{display:flex;gap:8px;padding:10px 12px 0;border-bottom:1px solid var(--border);}
+    .meet-side-tab{flex:1;border:none;background:transparent;color:var(--muted);padding:8px 10px;border-radius:10px 10px 0 0;font-size:12px;font-weight:700;cursor:pointer;}
+    .meet-side-tab.active{color:var(--text1);background:rgba(3,92,128,.12);}
+    /* Compatibilité ancien id */
+    #chat-panel{display:none;}
+    #chat-panel.open{display:none;}
+
+    .panel-tabs{
+      display:flex;border-bottom:1px solid var(--border);flex-shrink:0;
+    }
+    .panel-tab{
+      flex:1;padding:10px 6px;border:none;background:none;cursor:pointer;
+      font-size:11px;font-weight:700;color:var(--muted);
+      border-bottom:2px solid transparent;transition:all .15s;
+      display:flex;align-items:center;justify-content:center;gap:5px;
+      font-family:'Sora',sans-serif;
+    }
+    .panel-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+    .panel-tab:hover:not(.active){color:var(--text2);}
+
+    .panel-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+    .panel-section{display:none;flex:1;flex-direction:column;min-height:0;}
+    .panel-section.active{display:flex;}
+
+    .panel-head{
+      padding:10px 14px;border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;
+      font-size:12px;font-weight:700;color:var(--text1);flex-shrink:0;
+    }
+    /* ── Chat ── */
+    #chat-panel{display:none!important;} /* remplacé par side-panel */
+    #chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+    .chat-panel-head{display:none;} /* legacy */
+    .chat-msg{font-size:12px;line-height:1.5;}
+    .chat-msg-who{font-weight:700;color:var(--accent);margin-bottom:2px;}
+    .chat-msg-mine .chat-msg-who{color:#22c55e;}
+    .chat-msg-text{color:var(--text2);}
+    .chat-msg-time{font-size:10px;color:var(--muted);}
+    #chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+    .chat-msg{font-size:12px;line-height:1.5;}
+    .chat-msg-who{font-weight:700;color:var(--accent);margin-bottom:2px;}
+    .chat-msg-mine .chat-msg-who{color:#22c55e;}
+    .chat-msg-text{color:var(--text2);}
+    .chat-msg-time{font-size:10px;color:var(--muted);}
+    /* ── Notes collaboratives ── */
+    #notes-editor{
+      flex:1;width:100%;border:none;outline:none;resize:none;
+      background:var(--bg2);color:var(--text1);
+      font-size:13px;line-height:1.8;padding:14px;
+      font-family:'Sora',sans-serif;
+    }
+    .notes-footer{
+      padding:8px 14px;border-top:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;
+      flex-shrink:0;
+    }
+    .notes-status{font-size:10px;color:var(--muted);}
+    .notes-sync-dot{
+      width:7px;height:7px;border-radius:50%;background:#22c55e;
+      display:inline-block;margin-right:5px;
+      transition:background .3s;
+    }
+    .notes-sync-dot.syncing{background:#f59e0b;animation:recPulse .8s infinite;}
+    .notes-sync-dot.error{background:#f87171;}
+    .btn-export-notes{
+      padding:5px 12px;border-radius:7px;border:1px solid var(--border);
+      background:transparent;color:var(--accent);font-size:11px;font-weight:700;
+      cursor:pointer;font-family:'Sora',sans-serif;transition:all .15s;
+    }
+    .btn-export-notes:hover{background:rgba(3,92,128,0.1);}
+    /* Curseurs des autres éditeurs */
+    .collab-cursor{
+      position:absolute;width:2px;background:var(--accent2);
+      pointer-events:none;animation:cursorBlink 1s infinite;
+    }
+    @keyframes cursorBlink{0%,100%{opacity:1}50%{opacity:0}}
+    .collab-cursor-label{
+      position:absolute;top:-18px;left:0;
+      background:var(--accent2);color:white;
+      font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;
+      white-space:nowrap;font-family:'Sora',sans-serif;
+    }
+    .chat-file-msg{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);margin-top:4px;cursor:pointer;text-decoration:none;}
+    .chat-file-msg:hover{border-color:var(--accent);}
+    .chat-file-name{font-size:12px;font-weight:600;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+    .chat-file-size{font-size:10px;color:var(--muted);}
+    /* Barre de progression upload */
+    .chat-upload-preview{
+      margin-top:4px;padding:10px 12px;border-radius:10px;
+      background:var(--bg3);border:1px solid var(--border);
+    }
+    .chat-upload-name{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .chat-progress-track{
+      height:4px;border-radius:2px;background:rgba(3,92,128,0.15);overflow:hidden;
+    }
+    .chat-progress-fill{
+      height:100%;border-radius:2px;background:var(--accent);
+      width:0%;transition:width .1s linear;
+    }
+    .chat-upload-status{font-size:10px;color:var(--muted);margin-top:4px;display:flex;justify-content:space-between;}
+    .chat-input-row{
+      display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--border);
+    }
+    .chat-inp{
+      flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);
+      background:var(--bg3);color:var(--text1);font-size:12px;
+      font-family:'Sora',sans-serif;outline:none;
+    }
+    .chat-send-btn{
+      width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;
+      background:var(--accent);color:white;display:flex;align-items:center;justify-content:center;
+    }
+
+    /* Barre contrôles */
+    .meet-bar{
+      height:64px;
+      background:var(--bg2);
+      border-top:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      flex-shrink:0;   /* NE JAMAIS réduire la barre */
+      padding:0 16px;
+      /* Safe area iOS pour éviter le chevauchement avec le home indicator */
+      padding-bottom:env(safe-area-inset-bottom, 0px);
+      box-sizing:content-box;
+      position:relative;
+      z-index:10;
+    }
+    .ctrl-btn{
+      width:48px;height:48px;border-radius:14px;border:none;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+      transition:all .15s;color:var(--text1);
+    }
+    .ctrl-btn.active  {background:rgba(255,255,255,0.1);}
+    .ctrl-btn.bg-on   {background:rgba(3,92,128,.35); color:#7dd3fc;}
+    .ctrl-btn.inactive{background:rgba(248,113,113,0.2);color:var(--red);}
+    .ctrl-btn.hand-on {background:rgba(245,158,11,0.2);color:var(--yellow);}
+    .ctrl-btn.chat-on {background:rgba(3,92,128,0.2);color:#4db8d8;}
+    .ctrl-btn:hover   {filter:brightness(1.2);}
+    .ctrl-btn.danger  {background:rgba(220,38,38,0.2);color:var(--red);}
+    .ctrl-btn.danger:hover{background:#dc2626;color:white;}
+
+    /* Tooltip contrôles */
+    .ctrl-wrap{position:relative;}
+    .ctrl-wrap .ctrl-tip{
+      position:absolute;bottom:calc(100%+8px);left:50%;transform:translateX(-50%);
+      background:#1e293b;color:var(--text2);font-size:11px;white-space:nowrap;
+      padding:4px 9px;border-radius:6px;pointer-events:none;opacity:0;transition:opacity .15s;
+    }
+    .ctrl-wrap:hover .ctrl-tip{opacity:1;}
+
+    /* Notifications in-meeting */
+    #meet-notifs{
+      position:fixed;top:70px;right:20px;z-index:500;
+      display:flex;flex-direction:column;gap:8px;pointer-events:none;
+    }
+    .meet-notif{
+      background:var(--bg3);border:1px solid var(--border);border-radius:10px;
+      padding:10px 14px;font-size:12px;color:var(--text2);
+      animation:notifIn .25s ease;max-width:260px;
+    }
+    @keyframes notifIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+    /* Modal info (lien/code) */
+    #info-modal{
+      position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.6);
+      display:none;align-items:center;justify-content:center;
+    }
+    #info-modal.open{display:flex;}
+    .info-card{
+      background:var(--bg2);border:1px solid var(--border);border-radius:16px;
+      width:360px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,0.5);
+    }
+    .info-card h3{font-size:16px;font-weight:800;margin-bottom:16px;color:var(--text1);}
+    .info-row{margin-bottom:14px;}
+    .info-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;}
+    .info-val{
+      display:flex;align-items:center;gap:8px;
+      background:rgba(15,23,42,0.8);border:1px solid var(--border);
+      border-radius:9px;padding:9px 12px;
+    }
+    .info-val span{flex:1;font-size:13px;color:var(--text1);font-family:monospace;word-break:break-all;}
+    .copy-btn{
+      padding:5px 10px;border-radius:7px;border:none;cursor:pointer;
+      background:rgba(3,92,128,0.2);color:#4db8d8;font-size:11px;font-weight:700;
+      white-space:nowrap;transition:all .15s;
+    }
+    .copy-btn:hover{background:rgba(3,92,128,0.4);}
+    .info-close{
+      width:100%;margin-top:16px;padding:10px;border-radius:10px;border:1px solid var(--border);
+      background:transparent;color:var(--text2);font-size:13px;font-weight:600;
+      cursor:pointer;font-family:'Sora',sans-serif;transition:all .15s;
+    }
+    .info-close:hover{background:var(--bg3);}
+
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{animation:spin .7s linear infinite;display:inline-block;}
+    @keyframes moveFadeIn  { from{opacity:0}         to{opacity:1} }
+    @keyframes badgePop    { 0%{transform:scale(0)} 70%{transform:scale(1.3)} 100%{transform:scale(1)} }
+
+    /* ── Tableau blanc ── */
+    #whiteboard-canvas{
+      position:absolute;inset:0;cursor:crosshair;touch-action:none;
+      border-radius:0;
+    }
+    .wb-toolbar{
+      position:absolute;top:8px;left:50%;transform:translateX(-50%);
+      display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);
+      border-radius:30px;padding:4px 8px;z-index:10;box-shadow:0 4px 16px rgba(0,0,0,.3);
+    }
+    .wb-btn{
+      width:30px;height:30px;border-radius:50%;border:none;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;background:transparent;
+      color:var(--text2);transition:all .15s;font-size:14px;
+    }
+    .wb-btn:hover,.wb-btn.active{background:rgba(3,92,128,0.2);color:var(--accent);}
+    .wb-sep{width:1px;background:var(--border);margin:4px 2px;}
+    .wb-color{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .12s;}
+    .wb-color.active{border-color:white;transform:scale(1.2);}
+
+    /* ── Barre de progression de parole ── */
+    .speak-limit-bar{
+      position:absolute;bottom:0;left:0;right:0;height:3px;
+      background:rgba(34,197,94,0.6);transition:width .5s linear,background .3s;
+      border-radius:0 0 10px 10px;
+    }
+
+    /* ── Messages IA ── */
+    .ai-msg{display:flex;flex-direction:column;gap:3px;max-width:90%;}
+    .ai-msg.user{align-self:flex-end;}
+    .ai-msg.assistant{align-self:flex-start;}
+    .ai-bubble{
+      padding:8px 11px;border-radius:12px;font-size:12px;line-height:1.6;
+    }
+    .ai-msg.user .ai-bubble{
+      background:linear-gradient(135deg,var(--accent),#024a6a);color:white;
+      border-bottom-right-radius:3px;
+    }
+    .ai-msg.assistant .ai-bubble{
+      background:var(--bg3);color:var(--text1);border:1px solid var(--border);
+      border-bottom-left-radius:3px;
+    }
+    .ai-thinking{display:flex;gap:4px;padding:10px 14px;}
+    .ai-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);
+      animation:aiDot 1.4s infinite;}
+    .ai-dot:nth-child(2){animation-delay:.2s;}
+    .ai-dot:nth-child(3){animation-delay:.4s;}
+    @keyframes aiDot{0%,80%,100%{transform:scale(0.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+
+    /* ── Sondage ── */
+    .poll-choice-btn{
+      width:100%;padding:9px 14px;border-radius:9px;border:1px solid var(--border);
+      background:var(--bg3);color:var(--text1);font-size:13px;cursor:pointer;
+      font-family:'Sora',sans-serif;text-align:left;transition:all .15s;margin-bottom:6px;
+      display:flex;align-items:center;gap:8px;
+    }
+    .poll-choice-btn:hover{border-color:var(--accent);background:rgba(3,92,128,0.08);}
+    .poll-choice-btn.voted{border-color:var(--accent);background:rgba(3,92,128,0.15);font-weight:700;}
+    .poll-bar-wrap{margin-bottom:8px;}
+    .poll-bar-label{display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px;}
+    .poll-bar-track{height:8px;border-radius:4px;background:rgba(3,92,128,0.1);overflow:hidden;}
+    .poll-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),#4db8d8);transition:width .5s ease;}
+
+    /* ── Modale avis ── */
+    #review-modal {
+      position:fixed;inset:0;z-index:9999;
+      background:rgba(0,0,0,0.7);
+      display:none;align-items:center;justify-content:center;padding:20px;
+    }
+    #review-modal.open { display:flex; }
+    .review-card {
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:20px;width:100%;max-width:420px;padding:32px;
+      box-shadow:0 32px 80px rgba(0,0,0,.6);
+      animation:moveSlideUp .25s ease;
+    }
+    .review-stars { display:flex;gap:8px;justify-content:center;margin:20px 0; }
+    .star-btn {
+      font-size:32px;cursor:pointer;background:none;border:none;
+      transition:transform .15s;color:#475569;opacity:.5;
+    }
+    .star-btn:hover,
+    .star-btn.active { color:#f59e0b;opacity:1;transform:scale(1.15); }
+    .review-comment {
+      width:100%;padding:10px 14px;border-radius:10px;
+      border:1px solid var(--border);background:var(--bg3);
+      color:var(--text1);font-size:13px;resize:none;outline:none;
+      font-family:'Sora',sans-serif;margin-bottom:16px;
+      transition:border-color .2s;
+    }
+    .review-comment:focus { border-color:rgba(3,92,128,0.5); }
+    @keyframes moveSlideUp { from{opacity:0;transform:translateY(12px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+
+    /* Partage d'écran actif */
+    .ctrl-btn.screen-on { background: rgba(139,92,246,0.2); color: #a78bfa; }
+    .ctrl-btn.rec-on    { background: rgba(239,68,68,0.15); color: #f87171; }
+    .ctrl-btn.wb-on     { background: rgba(139,92,246,0.2); color: #a78bfa; }
+
+    /* Sondage */
+    .poll-option-input{
+      display:flex;align-items:center;gap:6px;margin-bottom:6px;
+    }
+    .poll-option-input input{
+      flex:1;padding:7px 10px;border-radius:8px;border:1px solid var(--border);
+      background:var(--bg3);color:var(--text1);font-size:12px;
+      font-family:'Sora',sans-serif;outline:none;
+    }
+    .poll-choice-btn{
+      width:100%;padding:10px 14px;border-radius:9px;
+      border:1px solid var(--border);background:transparent;
+      color:var(--text1);font-size:13px;cursor:pointer;text-align:left;
+      font-family:'Sora',sans-serif;transition:all .15s;margin-bottom:6px;
+    }
+    .poll-choice-btn:hover{border-color:var(--accent);background:rgba(3,92,128,0.08);}
+    .poll-choice-btn.voted{border-color:var(--accent);background:rgba(3,92,128,0.15);color:var(--accent);}
+    .poll-bar-wrap{margin-bottom:10px;}
+    .poll-bar-label{font-size:12px;color:var(--text2);margin-bottom:4px;display:flex;justify-content:space-between;}
+    .poll-bar-track{height:8px;border-radius:4px;background:rgba(255,255,255,0.06);overflow:hidden;}
+    .poll-bar-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .4s ease;}
+
+    /* Minuteur de parole */
+    .speech-timer{
+      position:absolute;top:8px;left:8px;
+      background:rgba(0,0,0,0.6);border-radius:20px;
+      padding:3px 9px;font-size:10px;font-weight:800;color:white;
+      font-family:'Sora',sans-serif;
+      display:flex;align-items:center;gap:4px;
+    }
+    .speech-timer.warning{background:rgba(245,158,11,0.85);}
+    .speech-timer.exceeded{background:rgba(239,68,68,0.9);animation:recPulse .7s infinite;}
+
+    /* IA messages */
+    .ai-msg{padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.6;max-width:95%;}
+    .ai-msg.user{background:rgba(3,92,128,0.15);color:var(--text1);align-self:flex-end;border-radius:10px 10px 2px 10px;}
+    .ai-msg.assistant{background:var(--bg3);color:var(--text2);align-self:flex-start;border:1px solid var(--border);border-radius:10px 10px 10px 2px;}
+    .ai-msg.loading{opacity:.6;}
+    .ai-typing{display:inline-flex;gap:3px;align-items:center;}
+    .ai-typing span{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:aiDot 1.2s infinite;}
+    .ai-typing span:nth-child(2){animation-delay:.2s;}
+    .ai-typing span:nth-child(3){animation-delay:.4s;}
+    @keyframes aiDot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+
+    /* Tableau blanc modal */
+    #whiteboard-modal{
+      position:fixed;inset:0;z-index:600;background:rgba(2,6,23,0.86);
+      display:none;flex-direction:column;backdrop-filter:blur(6px);
+    }
+    #whiteboard-modal.open{display:flex;}
+    .wb-shell{flex:1;display:flex;min-height:0;min-width:0;}
+    .wb-left-rail,.wb-right-rail{
+      width:310px;max-width:min(92vw,310px);background:var(--bg2);border-right:1px solid var(--border);
+      display:flex;flex-direction:column;min-height:0;min-width:0;transition:transform .2s ease,opacity .2s ease;
+    }
+    .wb-right-rail{border-right:none;border-left:1px solid var(--border);width:300px;max-width:min(92vw,300px);}
+    /* Panneau droit : onglets + assistant IA du tableau */
+    .wb-rail-tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid var(--border);flex-shrink:0;}
+    .wb-rail-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 8px;border:none;background:transparent;color:var(--muted);font-family:'Sora',sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+    .wb-rail-tab:hover{color:var(--text1);}
+    .wb-rail-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+    .wb-tab-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;}
+    .wb-tab-body[hidden]{display:none;}
+    .wbai{overflow:hidden;}
+    .wbai-msgs{flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+    .wbai-welcome{border:1px dashed var(--border);border-radius:14px;padding:14px;background:var(--bg3);}
+    .wbai-welcome-title{font-size:13px;font-weight:800;color:var(--text1);margin-bottom:4px;}
+    .wbai-welcome-text{font-size:11.5px;line-height:1.6;color:var(--muted);}
+    .wbai-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+    .wbai-chips button{padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);font-family:'Sora',sans-serif;font-size:11px;cursor:pointer;}
+    .wbai-chips button:hover{border-color:var(--accent);color:var(--accent);}
+    .wbai-msg{max-width:92%;padding:9px 12px;border-radius:12px;font-size:12px;line-height:1.6;word-break:break-word;}
+    .wbai-msg.user{align-self:flex-end;background:var(--accent);color:#04202b;border-bottom-right-radius:4px;}
+    .wbai-msg.assistant{align-self:flex-start;background:var(--bg3);color:var(--text1);border:1px solid var(--border);border-bottom-left-radius:4px;}
+    .wbai-msg.error{border-color:#f87171;color:#fca5a5;}
+    .wbai-actions{margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+    .wbai-count{font-size:10.5px;color:var(--muted);}
+    .wbai-ver{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
+    .wbai-vbtns{display:flex;gap:6px;flex-wrap:wrap;}
+    .wbai-restore{padding:4px 10px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-family:'Sora',sans-serif;font-size:10.5px;cursor:pointer;}
+    .wbai-restore:hover:not(:disabled){background:var(--accent);color:#fff;}
+    .wbai-restore:disabled{opacity:.5;cursor:default;border-color:var(--border);color:var(--muted);}
+    .wbai-text{white-space:pre-wrap;}
+    .wbai-undo{padding:4px 10px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'Sora',sans-serif;font-size:10.5px;cursor:pointer;}
+    .wbai-undo:hover:not(:disabled){border-color:#f87171;color:#f87171;}
+    .wbai-undo:disabled{opacity:.6;cursor:default;}
+    .wbai-composer{display:flex;gap:8px;align-items:flex-end;padding:10px 12px 12px;border-top:1px solid var(--border);background:var(--bg2);flex-shrink:0;}
+    .wbai-composer textarea{flex:1;resize:none;padding:9px 11px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-family:'Sora',sans-serif;font-size:12px;outline:none;max-height:110px;}
+    .wbai-composer textarea:focus{border-color:var(--accent);}
+    .wbai-composer button{width:38px;height:38px;border-radius:12px;border:none;background:var(--accent);color:#04202b;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+    .wbai-composer button:disabled,.wbai-composer textarea:disabled{opacity:.55;cursor:not-allowed;}
+    .wbai-open-btn{display:inline-flex;align-items:center;gap:6px;}
+    @keyframes maiPulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .wb-panel-head{padding:14px 14px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;}
+    .wb-panel-title{font-size:14px;font-weight:800;color:var(--text1);}
+    .wb-panel-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+    .wb-search-wrap{padding:12px 14px;border-bottom:1px solid var(--border);}
+    .wb-search{
+      width:100%;padding:10px 12px 10px 36px;border-radius:12px;border:1px solid var(--border);
+      background:var(--bg3);color:var(--text1);font-size:12px;outline:none;font-family:'Sora',sans-serif;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;background-position:12px center;
+    }
+    .wb-tool-scroll{flex:1;overflow:auto;padding:12px 14px 18px;display:flex;flex-direction:column;gap:14px;}
+    .wb-group{display:flex;flex-direction:column;gap:8px;}
+    .wb-group-title{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;}
+    .wb-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    .wb-tool-btn{
+      display:flex;align-items:center;gap:8px;width:100%;padding:9px 10px;border-radius:12px;border:1px solid var(--border);
+      background:transparent;color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif;
+      transition:all .15s;min-height:42px;text-align:left;
+    }
+    .wb-tool-btn:hover{background:rgba(3,92,128,0.09);border-color:rgba(3,92,128,0.35);}
+    .wb-tool-btn.active{background:rgba(3,92,128,0.18);border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 0 1px rgba(3,92,128,0.08);}
+    .wb-tool-btn .wb-ico{width:18px;text-align:center;flex-shrink:0;font-size:14px;}
+    .wb-chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+    .wb-size-btn,.wb-action-btn,.wb-mode-btn{
+      padding:7px 10px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);
+      font-size:11px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif;transition:all .15s;
+    }
+    .wb-size-btn.active,.wb-action-btn.active,.wb-mode-btn.active{background:rgba(3,92,128,0.15);border-color:var(--accent);color:var(--accent);}
+    .wb-color-row,.wb-bg-row{display:flex;flex-wrap:wrap;gap:8px;}
+    .wb-color-btn{width:26px;height:26px;border-radius:999px;border:2px solid transparent;cursor:pointer;transition:transform .12s,border-color .12s;}
+    .wb-color-btn.active{border-color:white;transform:scale(1.08);}
+    .wb-inline-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .wb-inline-field label,.wb-simple-label{display:block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+    .wb-inline-field input,.wb-inline-field select,.wb-simple-input{
+      width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);
+      font-size:12px;outline:none;font-family:'Sora',sans-serif;
+    }
+    .wb-center-stage{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(15,23,42,.45),rgba(2,6,23,.2));}
+    .wb-topbar{position:relative;z-index:12;height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;border-bottom:1px solid var(--border);background:rgba(6,13,26,.78);backdrop-filter:blur(8px);flex-shrink:0;}
+    .wb-topbar-left,.wb-topbar-right{display:flex;align-items:center;gap:8px;min-width:0;}
+    .wb-icon-btn{
+      width:38px;height:38px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;
+      display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;
+    }
+    .wb-icon-btn:hover{background:rgba(3,92,128,.09);border-color:rgba(3,92,128,.35);}
+    .wb-title-stack{min-width:0;}
+    .wb-title-stack h3{font-size:14px;font-weight:800;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .wb-title-stack p{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .wb-status-pill{padding:7px 11px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--text2);background:rgba(255,255,255,.02);white-space:nowrap;}
+    .wb-status-pill[data-mode="shared"]{color:#22c55e;border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.1);}
+    .wb-status-pill[data-mode="host_only"]{color:#f59e0b;border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.11);}
+    .wb-status-pill[data-mode="readonly"]{color:#f87171;border-color:rgba(248,113,113,.25);background:rgba(248,113,113,.11);}
+    .wb-canvas-stage{flex:1;min-height:0;min-width:0;position:relative;padding:14px;z-index:1;}
+    .wb-canvas-frame{position:relative;width:100%;height:100%;border-radius:20px;overflow:hidden;border:1px solid var(--border);background:radial-gradient(circle at top left,rgba(77,184,216,.07),transparent 35%),var(--bg);box-shadow:0 18px 60px rgba(0,0,0,.26);}
+    #wb-canvas{display:block;cursor:crosshair;touch-action:none;background-image:linear-gradient(rgba(148,163,184,.08) 1px, transparent 1px),linear-gradient(90deg, rgba(148,163,184,.08) 1px, transparent 1px);background-size:32px 32px;background-color:transparent;}
+    #wb-cursor-layer{position:absolute;left:0;top:0;pointer-events:none;z-index:5;}
+    .wb-mobile-toggle{display:none;}
+    .wb-props-empty{padding:18px 16px;color:var(--muted);font-size:12px;line-height:1.6;}
+    .wb-bottom-hint{padding:9px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);background:rgba(255,255,255,.015);}
+    .wb-confirm-overlay{position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;padding:18px;}
+    .wb-confirm-card{width:min(92vw,380px);background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:22px;box-shadow:0 28px 70px rgba(0,0,0,.45);}
+    .wb-confirm-card h3{font-size:17px;font-weight:800;color:var(--text1);margin-bottom:8px;}
+    .wb-confirm-card p{font-size:13px;color:var(--text2);line-height:1.65;margin-bottom:16px;}
+    .wb-confirm-actions{display:flex;gap:10px;}
+    .wb-confirm-actions button{flex:1;padding:11px 14px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif;}
+    .wb-confirm-cancel{border:1px solid var(--border);background:transparent;color:var(--text2);}
+    .wb-confirm-danger{border:none;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;}
+    .wb-access-menu{position:absolute;top:56px;right:0;min-width:220px;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:8px;box-shadow:0 18px 44px rgba(0,0,0,.34);z-index:950;}
+    .wb-access-item{width:100%;text-align:left;padding:10px 12px;border:none;background:transparent;color:var(--text2);border-radius:12px;cursor:pointer;font-family:'Sora',sans-serif;display:flex;flex-direction:column;gap:2px;}
+    .wb-access-item:hover,.wb-access-item.active{background:rgba(3,92,128,.12);color:var(--text1);}
+    .wb-access-item strong{font-size:12px;}
+    .wb-access-item span{font-size:10px;color:var(--muted);}
+
+    .meet-back-btn{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:rgba(3,92,128,0.08);color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s;}
+    .meet-back-btn:hover{background:rgba(3,92,128,0.16);border-color:rgba(3,92,128,0.35);color:var(--text1);}
+    .wb-export-select{height:38px;padding:0 12px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-size:12px;font-weight:700;font-family:'Sora',sans-serif;outline:none;}
+    .wb-settings-overlay{position:fixed;inset:0;z-index:1200;background:rgba(2,6,23,.74);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;}
+    .wb-settings-card{width:min(1100px,96vw);max-height:92vh;overflow:auto;background:var(--bg2);border:1px solid var(--border);border-radius:24px;box-shadow:0 28px 80px rgba(0,0,0,.45);padding:22px;}
+    .wb-settings-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px;}
+    .wb-settings-head h2{font-size:22px;font-weight:800;color:var(--text1);margin:0 0 6px;}
+    .wb-settings-head p{font-size:13px;line-height:1.65;color:var(--muted);max-width:740px;}
+    .wb-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+    .wb-settings-section{padding:16px;border-radius:18px;border:1px solid var(--border);background:rgba(255,255,255,.02);}
+    .wb-settings-section h3{font-size:14px;font-weight:800;color:var(--text1);margin-bottom:10px;}
+    .wb-settings-help{font-size:12px;color:var(--muted);line-height:1.65;margin-top:10px;}
+    .wb-shortcut-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    .wb-shortcut-list div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:var(--bg3);border:1px solid var(--border);font-size:11px;color:var(--text2);}
+    .wb-shortcut-list kbd{font-family:inherit;font-size:11px;font-weight:800;color:var(--text1);background:rgba(3,92,128,.12);padding:4px 7px;border-radius:8px;border:1px solid rgba(3,92,128,.22);}
+    #wb-props-panel{flex:1;min-height:0;overflow:auto;padding-bottom:12px;}
+    .wb-props-panel-inner{padding:14px 14px 90px;overflow:auto;min-height:0;}
+    #wb-canvas-scroll{position:absolute;inset:0;overflow:auto;cursor:grab;}
+    #wb-canvas-scroll:active{cursor:grabbing;}
+    #wb-canvas-inner{position:relative;min-width:2200px;min-height:1400px;}
+
+    @media (max-width: 1100px){
+      .wb-left-rail,.wb-right-rail{position:absolute;top:58px;bottom:0;z-index:30;width:min(88vw,320px);box-shadow:0 14px 40px rgba(0,0,0,.35);}
+      .wb-left-rail{left:0;transform:translateX(-101%);}
+      .wb-right-rail{right:0;transform:translateX(101%);}
+      .wb-left-rail.open,.wb-right-rail.open{transform:translateX(0);}
+      .wb-mobile-toggle{display:flex;}
+    }
+    @media (max-width: 680px){
+      .wb-topbar{padding:0 10px;gap:8px;height:54px;}
+      .wb-canvas-stage{padding:10px;}
+      .wb-title-stack p,.wb-title-stack h3{max-width:150px;}
+      .wb-tool-grid{grid-template-columns:1fr;}
+      .wb-inline-fields{grid-template-columns:1fr;}
+      .wb-status-pill{display:none;}
+    }
+    .ctrl-btn.rec-on #rec-ico { fill:#f87171; animation:recPulse 1.2s ease infinite; }
+    @keyframes recPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
+
+    /* Réactions emoji en réunion */
+    .meet-reaction-bar {
+      /* Positionnement dynamique via JS (bottom de la meet-bar) */
+      position:fixed;
+      display:flex;gap:8px;
+      background:var(--bg2);border:1px solid var(--border);
+      border-radius:30px;padding:8px 12px;
+      box-shadow:0 -4px 24px rgba(0,0,0,.5);
+      opacity:0;pointer-events:none;
+      transition:opacity .18s, transform .18s;
+      transform:translateY(8px);
+      z-index:500;
+    }
+    .meet-reaction-bar.show {
+      opacity:1;
+      pointer-events:all;
+      transform:translateY(0);
+    }
+    .react-btn {
+      width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;
+      background:transparent;font-size:20px;display:flex;align-items:center;justify-content:center;
+      transition:transform .12s,background .12s;
+    }
+    .react-btn:hover { transform:scale(1.25); background:rgba(255,255,255,0.08); }
+    .flying-emoji {
+      position:fixed;font-size:32px;pointer-events:none;z-index:8000;
+      animation:flyUp 2.5s ease forwards;
+    }
+    @keyframes flyUp {
+      0%  { opacity:1; transform:translateY(0) scale(1); }
+      100%{ opacity:0; transform:translateY(-180px) scale(1.4); }
+    }
+
+    /* ══════════════════════════════════════
+       RESPONSIVE MOBILE
+       ══════════════════════════════════════ */
+    @media(max-width:768px){
+
+      /* ── Lobby ── */
+      .lobby-card{width:96vw;max-width:420px;}
+      .lobby-preview{height:200px;}
+
+      /* ── Layout salle ──
+         On utilise une grille CSS à 3 lignes :
+         topbar (fixe) | vidéos (flexible) | barre contrôles (fixe)
+         Cela garantit que la barre est TOUJOURS visible */
+      #room{
+        display:grid !important;
+        grid-template-rows: 48px 1fr auto;
+        grid-template-columns: 1fr;
+        height:100vh;
+        height:100dvh;
+        height:-webkit-fill-available;
+        overflow:hidden;
+      }
+      .meet-top{
+        grid-row:1;
+        height:48px;
+        padding:0 10px;
+        min-height:48px;
+      }
+      .meet-body{
+        grid-row:2;
+        overflow:hidden;
+        min-height:0;
+        max-height:none; /* override desktop */
+      }
+      .meet-bar{
+        grid-row:3;
+        height:auto;
+        min-height:58px;
+        padding:8px 6px;
+        padding-bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+        gap:4px;
+        flex-wrap:nowrap;
+        overflow-x:auto;
+        overflow-y:hidden;
+        justify-content:flex-start;
+        scrollbar-width:none;
+        -webkit-overflow-scrolling:touch;
+        flex-shrink:0;
+      }
+      .meet-bar::-webkit-scrollbar{display:none;}
+
+      /* ── Boutons contrôle ── */
+      .ctrl-btn{
+        width:44px;height:44px;
+        border-radius:12px;
+        flex-shrink:0;
+      }
+      .ctrl-wrap{flex-shrink:0;}
+      .ctrl-tip{display:none;}
+
+      /* ── Grille vidéo ── */
+      #video-grid{padding:4px;gap:4px;}
+
+      /* ── Topbar textes ── */
+      .meet-name{font-size:12px;}
+      .meet-back-btn{width:30px;height:30px;border-radius:9px;}
+      .meet-timer{font-size:11px;}
+      .meet-info-chip span{display:none;}/* Cacher le texte, garder l'icône */
+
+      /* ── Chat panel : plein écran sur mobile ── */
+      #chat-panel{
+        position:fixed;
+        inset:0;
+        width:100%;
+        z-index:300;
+        border-left:none;
+        grid-row:unset;
+      }
+
+      /* Réactions : position gérée par JS (toggleReactions) */
+
+      /* ── Mode focus mobile ── */
+      #video-grid.focus-mode{padding:4px;gap:4px;}
+      #thumbnails-row{padding:2px;}
+      #thumbnails-row .peer-tile{height:72px;}
+
+      /* ── Tuiles ── */
+      .peer-av{width:44px;height:44px;font-size:15px;border-radius:12px;}
+      .peer-name{font-size:10px;padding:2px 7px;}
+      .peer-hand{font-size:18px;}
+    }
+
+    /* Très petits écrans */
+    @media(max-width:380px){
+      .ctrl-btn{width:38px;height:38px;}
+      .meet-bar{gap:3px;padding:6px 4px;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ LOBBY ══════════════ -->
+<div id="lobby">
+  <div class="lobby-card">
+    <div class="lobby-preview">
+      <video id="lobby-video" autoplay muted playsinline></video>
+      <div class="lobby-cam-off" id="lobby-cam-off" style="display:none;">
+        <div class="lobby-avatar" id="lobby-avatar-init">?</div>
+        <div style="font-size:12px;color:var(--muted);">Caméra désactivée</div>
+      </div>
+      <div style="position:absolute;bottom:56px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;">
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:4px;" id="lmic-label">Micro actif</div>
+        </div>
+        <div style="text-align:center;margin-left:8px;">
+          <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:4px;" id="lcam-label">Caméra active</div>
+        </div>
+      </div>
+      <div class="lobby-controls">
+        <button class="lctrl on" id="lctrl-mic-btn" title="Micro">
+          <svg id="lmic-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          <svg id="lmic-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="display:none"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button class="lctrl on" id="lctrl-cam-btn" title="Caméra">
+          <svg id="lcam-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <svg id="lcam-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="display:none"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h3a2 2 0 0 1 2 2v9.34"/><path d="M16 11.37A4 4 0 1 1 12.63 8"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="lobby-body">
+      <div class="lobby-title"><%= meeting.title %></div>
+      <div class="lobby-sub">Activez ou désactivez votre micro et caméra avant d'entrer</div>
+      <div class="lobby-name-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" style="flex-shrink:0"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <input type="text" class="lobby-name-inp" id="lobby-name" placeholder="Votre nom d'affichage"
+               value="<%= userEmail ? userEmail.split('@')[0] : '' %>"/>
+      </div>
+
+      <!-- Test caméra/micro : sélection des périphériques + niveau micro en direct -->
+      <button type="button" id="lobby-devices-toggle" onclick="toggleLobbyDevicePanel()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;padding:0 0 12px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span id="lobby-devices-toggle-label">Tester caméra et micro</span>
+      </button>
+      <div id="lobby-devices-panel" style="display:none;margin-bottom:16px;">
+        <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;">Caméra</label>
+        <select id="lobby-select-camera" style="width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-size:12px;font-family:'Sora',sans-serif;outline:none;margin-bottom:10px;"></select>
+
+        <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;">Microphone</label>
+        <select id="lobby-select-mic" style="width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-size:12px;font-family:'Sora',sans-serif;outline:none;margin-bottom:6px;"></select>
+        <div style="height:6px;border-radius:4px;background:var(--bg3);overflow:hidden;margin-bottom:10px;">
+          <div id="lobby-mic-level" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#4db8d8);transition:width .08s linear;"></div>
+        </div>
+
+        <div id="lobby-speaker-row">
+          <label style="display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;">Haut-parleurs</label>
+          <div style="display:flex;gap:6px;">
+            <select id="lobby-select-speaker" style="flex:1;padding:8px 10px;border-radius:9px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-size:12px;font-family:'Sora',sans-serif;outline:none;"></select>
+            <button type="button" onclick="testLobbySpeaker()" style="padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text1);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Tester</button>
+          </div>
+        </div>
+      </div>
+      <% if (locals.needsCode) { %>
+      <!-- Champ code d'accès obligatoire -->
+      <div id="code-entry-block" style="margin-bottom:16px;">
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:7px;">Code d'accès requis</label>
+        <input type="text" id="lobby-code" maxlength="10" placeholder="Entrez le code…"
+          style="width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(3,92,128,0.3);background:var(--bg3);color:var(--text1);font-size:18px;font-weight:800;letter-spacing:.2em;text-align:center;font-family:'Sora',sans-serif;outline:none;"/>
+        <div id="code-err" style="display:none;font-size:12px;color:#f87171;margin-top:6px;text-align:center;"></div>
+      </div>
+      <% } %>
+
+      <% if (locals.meeting && meeting.host === (locals.userEmail || '')) { %>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button id="lobby-copy-btn" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:rgba(3,92,128,0.1);color:#4db8d8;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Copier le lien
+        </button>
+      </div>
+      <% } %>
+
+      <button class="btn-join" id="btn-join">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:8px;vertical-align:middle"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        Rejoindre la réunion
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SALLE ══════════════ -->
+<div id="room">
+  <!-- Topbar -->
+  <div class="meet-top">
+    <div class="meet-top-left">
+      <button class="meet-back-btn" onclick="window.location.href='/mail'" title="Retour vers /mail">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <div class="meet-logo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+      </div>
+      <div>
+        <div class="meet-name"><%= meeting.title %></div>
+        <div class="meet-timer" id="meet-timer">00:00</div>
+      </div>
+    </div>
+    <div class="meet-top-right" style="display:flex;align-items:center;gap:8px;">
+
+      <button onclick="MeetApp.toggleTheme()" id="btn-theme"
+        style="background:none;border:1px solid var(--border);border-radius:8px;cursor:pointer;color:var(--text3);padding:6px 8px;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;font-family:'Sora',sans-serif;transition:all .15s;"
+        title="Changer le thème">
+        <svg id="theme-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="theme-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span class="sb-label" id="theme-label">Clair</span>
+      </button>
+      <% if (false) { %><% } %><!-- boutons hôte -->
+      <% if (true) { %>
+      <button id="btn-summary" onclick="MeetApp.generateSummary()"
+        style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;cursor:pointer;color:#a78bfa;padding:5px 10px;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;font-family:'Sora',sans-serif;"
+        title="Résumé IA">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Résumé IA
+      </button>
+      <% } %>
+      <div class="meet-info-chip" onclick="MeetApp.showInfo()" title="Infos réunion">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="peer-count">1 participant</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Corps -->
+  <div class="meet-body">
+    <div id="video-grid"></div>
+    <div id="captions-bar" style="display:none;position:absolute;left:50%;bottom:90px;transform:translateX(-50%);max-width:min(720px,86%);background:rgba(0,0,0,.72);backdrop-filter:blur(6px);color:#fff;padding:10px 18px;border-radius:12px;font-size:14px;line-height:1.5;text-align:center;z-index:40;pointer-events:none;"></div>
+
+    <!-- ── Panneau salle d'attente (hôte uniquement) ── -->
+    <% if (meeting.host === (userEmail || '')) { %>
+    <div id="waiting-panel" style="display:none;background:var(--bg2);border:1px solid rgba(245,158,11,0.3);border-radius:12px;margin:8px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(245,158,11,0.08);border-bottom:1px solid rgba(245,158,11,0.15);">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span style="font-size:12px;font-weight:700;color:#f59e0b;">Salle d'attente</span>
+          <span id="waiting-badge" style="display:none;background:#f87171;color:white;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:20px;padding:0 4px;align-items:center;justify-content:center;"></span>
+        </div>
+      </div>
+      <div id="waiting-list"></div>
+    </div>
+    <% } %>
+
+    <div id="participation-panel">
+      <div class="panel-head">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4db8d8" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+          Taux de participation
+        </span>
+        <button style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0 2px;" onclick="MeetApp.closeParticipationPanel()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="meet-side-tabs">
+        <button class="meet-side-tab active" data-tab="participation" onclick="MeetApp.switchParticipationTab('participation')">Participation</button>
+        <button class="meet-side-tab" data-tab="metrics" onclick="MeetApp.switchParticipationTab('metrics')">Métrics</button>
+        <button class="meet-side-tab" data-tab="network" onclick="MeetApp.switchParticipationTab('network')">Bitrate</button>
+      </div>
+      <div id="participation-body" style="flex:1;overflow:auto;padding:10px;"></div>
+    </div>
+
+    <div id="admin-panel">
+      <div class="panel-head">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3"/></svg>
+          Espace admin
+        </span>
+        <button style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0 2px;" onclick="MeetApp.closeAdminPanel()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="meet-side-tabs" style="flex-wrap:wrap;row-gap:6px;">
+        <button class="meet-side-tab active" data-tab="participants" onclick="MeetApp.switchAdminTab('participants')">Participants</button>
+        <button class="meet-side-tab" data-tab="waiting" onclick="MeetApp.switchAdminTab('waiting')">Attente <span id="admin-waiting-badge" style="display:none;margin-left:6px;background:#f87171;color:white;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:20px;padding:0 4px;align-items:center;justify-content:center;"></span></button>
+        <button class="meet-side-tab" data-tab="permissions" onclick="MeetApp.switchAdminTab('permissions')">Permissions</button>
+        <button class="meet-side-tab" data-tab="queue" onclick="MeetApp.switchAdminTab('queue')">Parole</button>
+        <button class="meet-side-tab" data-tab="logs" onclick="MeetApp.switchAdminTab('logs')">Journal <span id="admin-lock-badge" style="display:none;margin-left:6px;background:#f59e0b;color:white;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:20px;padding:0 6px;align-items:center;justify-content:center;"></span></button>
+      </div>
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="MeetApp.muteAllParticipants(true)" style="padding:8px 10px;border:none;border-radius:10px;background:rgba(248,113,113,.14);color:var(--red);font-size:11px;font-weight:800;cursor:pointer;">Mute all</button>
+        <button onclick="MeetApp.lockMeeting('waiting')" style="padding:8px 10px;border:none;border-radius:10px;background:rgba(245,158,11,.14);color:#f59e0b;font-size:11px;font-weight:800;cursor:pointer;">Verrou attente</button>
+        <button onclick="MeetApp.lockMeeting('refuse')" style="padding:8px 10px;border:none;border-radius:10px;background:rgba(220,38,38,.14);color:#fecaca;font-size:11px;font-weight:800;cursor:pointer;">Verrou refus</button>
+        <a href="/api/meetings/<%= meeting.id %>/attendance.csv" style="padding:8px 10px;border:none;border-radius:10px;background:rgba(3,92,128,.16);color:var(--accent);font-size:11px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Rapport de présence
+        </a>
+      </div>
+      <div id="admin-body" style="flex:1;overflow:auto;padding:10px;"></div>
+    </div>
+
+    <!-- ── Panneau latéral multi-onglets ── -->
+    <div id="side-panel">
+
+      <!-- Onglets -->
+      <div class="panel-tabs">
+        <button class="panel-tab active" id="tab-chat" onclick="MeetApp.switchTab('chat')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chat
+          <span id="chat-badge-tab" style="display:none;background:#f87171;color:white;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:20px;padding:0 3px;display:none;align-items:center;justify-content:center;"></span>
+        </button>
+        <button class="panel-tab" id="tab-notes" onclick="MeetApp.switchTab('notes')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Notes
+        </button>
+        <button class="panel-tab" id="tab-poll" onclick="MeetApp.switchTab('poll')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Sondage
+        </button>
+        <button class="panel-tab" id="tab-ai" onclick="MeetApp.switchTab('ai')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          IA
+        </button>
+        <!-- <button class="panel-tab" id="tab-whiteboard" onclick="MeetApp.switchTab('whiteboard')" title="Tableau blanc">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Tableau
+        </button> -->
+        <button style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0 8px;flex-shrink:0;" onclick="MeetApp.toggleChat()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Corps -->
+      <div class="panel-body">
+
+        <!-- ── Section Chat ── -->
+        <div class="panel-section active" id="section-chat">
+          <div id="chat-msgs"></div>
+          <div class="chat-input-row">
+            <input type="file" id="chat-file-inp" style="display:none" onchange="MeetApp.sendFile(this)"/>
+            <button onclick="document.getElementById('chat-file-inp').click()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px;display:flex;align-items:center;flex-shrink:0;" title="Fichier">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <input type="text" class="chat-inp" id="chat-inp" placeholder="Message…" onkeydown="if(event.key==='Enter')MeetApp.sendChat()"/>
+            <button class="chat-send-btn" onclick="MeetApp.sendChat()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;padding:0 10px 10px;color:var(--muted);font-size:11px;user-select:none;">
+            <input type="checkbox" id="chat-anonymous-toggle" style="accent-color:var(--accent);cursor:pointer;"/>
+            <span>Envoyer anonymement <span style="opacity:.8;">(affiché comme “Un participant”)</span></span>
+          </label>
+        </div>
+
+        <!-- ── Section Notes collaboratives ── -->
+        <div class="panel-section" id="section-notes">
+          <div class="panel-head">
+            <span style="display:flex;align-items:center;gap:6px;">
+              <span class="notes-sync-dot" id="notes-dot"></span>
+              Notes partagées
+            </span>
+            <span id="notes-writers" style="font-size:10px;color:var(--muted);"></span>
+          </div>
+          <div style="flex:1;position:relative;display:flex;flex-direction:column;min-height:0;">
+            <textarea id="notes-editor"
+              placeholder="Commencez à écrire… toutes les modifications sont synchronisées en temps réel avec les autres participants."></textarea>
+          </div>
+          <div class="notes-footer">
+            <span class="notes-status" id="notes-status">Connecté</span>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-export-notes" onclick="MeetApp.exportNotes('txt')" title="Télécharger .txt">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                TXT
+              </button>
+              <button class="btn-export-notes" onclick="MeetApp.exportNotes('md')" title="Télécharger .md">MD</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Section Sondage ── -->
+        <div class="panel-section" id="section-poll">
+          <div class="panel-head">
+            <span style="display:flex;align-items:center;gap:6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Sondage en direct
+            </span>
+            <% if (false) { %><% } %>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;">
+            <!-- Zone création (hôte) -->
+            <div id="poll-create-zone" style="display:none;">
+              <input id="poll-question" type="text" placeholder="Question du sondage…"
+                style="width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-size:13px;font-family:'Sora',sans-serif;outline:none;margin-bottom:8px;"/>
+              <div id="poll-options-list"></div>
+              <button onclick="MeetApp.addPollOption()"
+                style="width:100%;padding:7px;border-radius:8px;border:1px dashed var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;margin:4px 0 10px;font-family:'Sora',sans-serif;">
+                + Ajouter un choix
+              </button>
+              <button onclick="MeetApp.launchPoll()"
+                style="width:100%;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent),#024a6a);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif;">
+                Lancer le sondage
+              </button>
+            </div>
+            <!-- Zone vote (tous) -->
+            <div id="poll-vote-zone" style="display:none;">
+              <div id="poll-question-display" style="font-size:14px;font-weight:700;color:var(--text1);margin-bottom:12px;"></div>
+              <div id="poll-choices"></div>
+            </div>
+            <!-- Zone résultats -->
+            <div id="poll-results-zone" style="display:none;">
+              <div id="poll-results-title" style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:10px;"></div>
+              <div id="poll-results-bars"></div>
+              <div style="text-align:center;margin-top:10px;">
+                <button id="poll-new-btn" onclick="MeetApp.newPoll()" style="display:none;padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
+                  Nouveau sondage
+                </button>
+              </div>
+            </div>
+            <!-- Placeholder -->
+            <div id="poll-placeholder" style="text-align:center;padding:30px 10px;color:var(--muted);">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4;margin-bottom:10px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              <div style="font-size:12px;">Aucun sondage en cours</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Section Assistant IA ── -->
+        <div class="panel-section" id="section-ai">
+          <div class="panel-head">
+            <span style="display:flex;align-items:center;gap:6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="15" x2="8" y2="15.01"/><line x1="12" y1="15" x2="12" y2="15.01"/><line x1="16" y1="15" x2="16" y2="15.01"/></svg>
+              Assistant IA
+            </span>
+            <button onclick="MeetApp.clearAIChat()"
+              style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);">
+              Effacer
+            </button>
+          </div>
+          <div id="ai-msgs" style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;"></div>
+          <div class="ai-quick" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px 0;">
+          <button type="button" onclick="MeetApp.generateSummary()" style="padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Résumé &amp; actions</button>
+          <button type="button" onclick="MeetAIExtras.openQuizModal()" style="padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Quiz depuis le chat</button>
+          <label id="mai-toggle" title="L'hôte active la conservation du chat et des sous-titres pour rédiger le compte-rendu, envoyé par e-mail à la fin" style="display:none;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="mai-toggle-box" onchange="MeetAIExtras.toggleSummary(this.checked)" style="accent-color:var(--accent);"> Compte-rendu IA auto
+          </label>
+          <select onchange="MeetAIExtras.setCaptionLang(this.value)" title="Traduire les sous-titres" aria-label="Traduire les sous-titres" style="padding:5px 8px;border-radius:999px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:11px;font-family:inherit;">
+            <option value="">Sous-titres : original</option><option value="fr">Traduire en français</option><option value="en">Traduire en anglais</option>
+            <option value="es">Traduire en espagnol</option><option value="pt">Traduire en portugais</option><option value="de">Traduire en allemand</option><option value="ar">Traduire en arabe</option>
+          </select>
+        </div>
+        <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;">
+            <input type="text" id="ai-inp" placeholder="Pose une question à l'IA…"
+              style="flex:1;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg3);color:var(--text1);font-size:12px;font-family:'Sora',sans-serif;outline:none;"
+              onkeydown="if(event.key==='Enter')MeetApp.sendAIMessage()"/>
+            <button onclick="MeetApp.sendAIMessage()"
+              style="padding:9px 14px;border-radius:9px;border:none;background:var(--accent);color:white;cursor:pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Section Tableau blanc ── -->
+        <div class="panel-section" id="section-whiteboard" style="position:relative;overflow:hidden;">
+          <div class="wb-toolbar" id="wb-toolbar">
+            <button class="wb-btn active" id="wb-pen" onclick="MeetApp.setWbTool('pen')" title="Stylo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4db8d8" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+            <button class="wb-btn" id="wb-line" onclick="MeetApp.setWbTool('line')" title="Ligne">╱</button>
+            <button class="wb-btn" id="wb-rect" onclick="MeetApp.setWbTool('rect')" title="Rectangle">▭</button>
+            <button class="wb-btn" id="wb-circle" onclick="MeetApp.setWbTool('circle')" title="Cercle">○</button>
+            <button class="wb-btn" id="wb-text" onclick="MeetApp.setWbTool('text')" title="Texte">T</button>
+            <button class="wb-btn" id="wb-eraser" onclick="MeetApp.setWbTool('eraser')" title="Effaceur"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path d="M20 20H7L3 16l11-11 7 7-1 8z"/><path d="M6.5 17.5l5-5"/></svg></button>
+            <div class="wb-sep"></div>
+            <div class="wb-color active" style="background:#4db8d8;" data-color="#4db8d8" onclick="MeetApp.setWbColor('#4db8d8')"></div>
+            <div class="wb-color" style="background:#f87171;" data-color="#f87171" onclick="MeetApp.setWbColor('#f87171')"></div>
+            <div class="wb-color" style="background:#22c55e;" data-color="#22c55e" onclick="MeetApp.setWbColor('#22c55e')"></div>
+            <div class="wb-color" style="background:#f59e0b;" data-color="#f59e0b" onclick="MeetApp.setWbColor('#f59e0b')"></div>
+            <div class="wb-color" style="background:#a78bfa;" data-color="#a78bfa" onclick="MeetApp.setWbColor('#a78bfa')"></div>
+            <div class="wb-color" style="background:#ffffff;" data-color="#ffffff" onclick="MeetApp.setWbColor('#ffffff')"></div>
+            <div class="wb-sep"></div>
+            <input type="range" id="wb-size" min="1" max="20" value="3"
+              style="width:60px;accent-color:var(--accent);" oninput="MeetApp.setWbSize(this.value)"/>
+            <div class="wb-sep"></div>
+            <button class="wb-btn" onclick="MeetApp.clearWhiteboard()" title="Effacer tout"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+          </div>
+          <canvas id="whiteboard-canvas"></canvas>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Barre contrôles -->
+  <div class="meet-bar">
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-mic" onclick="MeetApp.toggleMic()" title="Micro">
+        <svg id="mic-on-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <svg id="mic-off-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+      <span class="ctrl-tip">Micro</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-cam" onclick="MeetApp.toggleCam()" title="Caméra">
+        <svg id="cam-on-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <svg id="cam-off-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h3a2 2 0 0 1 2 2v9.34"/></svg>
+      </button>
+      <span class="ctrl-tip">Caméra</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-bgblur" onclick="MeetApp.toggleBackgroundBlur()" title="Flouter l'arrière-plan">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" stroke-dasharray="1.5 2"/></svg>
+      </button>
+      <span class="ctrl-tip">Flouter le fond</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn" id="btn-captions" onclick="MeetApp.toggleCaptions()" title="Sous-titres en direct">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h2M7 11h6M13 15h4M15 11h2"/></svg>
+      </button>
+      <span class="ctrl-tip">Sous-titres</span>
+    </div>
+    <% if (true) { %>
+    <div class="ctrl-wrap" id="wrap-speak-limit" style="display:none;">
+      <button class="ctrl-btn active" id="btn-speak-limit" onclick="MeetApp.openSpeakLimit()" title="Limite de parole">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <span class="ctrl-tip">Minuteur</span>
+    </div>
+    <% } %>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-hand" onclick="MeetApp.toggleHand()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+      </button>
+      <span class="ctrl-tip">Lever la main</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-react" onclick="MeetApp.toggleReactions()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+      </button>
+      <span class="ctrl-tip">Réactions</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-screen" onclick="MeetApp.toggleScreen()" title="Partager l'écran">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </button>
+      <span class="ctrl-tip">Partager l'écran</span>
+      <script>
+        // Cacher sur iOS (non supporté)
+        if(/iPad|iPhone|iPod/.test(navigator.userAgent)){
+          document.currentScript.parentElement.style.display='none';
+        }
+      </script>
+    </div>
+    <div class="ctrl-wrap" style="position:relative;">
+      <button class="ctrl-btn active" id="btn-chat" onclick="MeetApp.toggleChat()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span id="chat-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#f87171;color:white;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:20px;display:none;align-items:center;justify-content:center;padding:0 4px;font-family:'Sora',sans-serif;line-height:1;animation:badgePop .2s ease;"></span>
+      </button>
+      <span class="ctrl-tip">Chat</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-whiteboard" onclick="MeetApp.toggleWhiteboard()" title="Tableau blanc">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8l3 3 4-4"/></svg>
+      </button>
+      <span class="ctrl-tip">Tableau</span>
+    </div>
+    <!-- <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-whiteboard" onclick="MeetApp.openWhiteboard()" title="Tableau blanc">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
+      <span class="ctrl-tip">Tableau</span>
+    </div> -->
+    <div class="ctrl-wrap" id="ctrl-popcorn-wrap" style="display:<%= (meeting.host === (userEmail || '')) ? 'block' : 'none' %>;">
+      <button class="ctrl-btn active" id="btn-popcorn" onclick="MeetApp.openPopcornLauncher()" title="Mode Popcorn">
+        <span style="font-size:18px;line-height:1;display:block;">🍿</span>
+      </button>
+      <span class="ctrl-tip">Popcorn</span>
+    </div>
+<div class="ctrl-wrap" id="ctrl-quiz-wrap" style="display:<%= (meeting.host === (userEmail || '')) ? 'block' : 'none' %>;">
+      <button class="ctrl-btn active" id="btn-quiz" onclick="MeetApp.openQuizCreator()" title="Live Quiz">
+        <span style="font-size:18px;line-height:1;display:block;">⚡</span>
+      </button>
+      <span class="ctrl-tip">Quiz</span>
+    </div>
+<div class="ctrl-wrap" id="ctrl-breakout-wrap" style="display:<%= (meeting.host === (userEmail || '')) ? 'block' : 'none' %>;">
+      <button class="ctrl-btn active" id="btn-breakout" onclick="MeetApp.openBreakoutPanel()" title="Salles de sous-groupes">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      </button>
+      <span class="ctrl-tip">Sous-groupes</span>
+    </div>
+<div class="ctrl-wrap" id="ctrl-participation-wrap" style="display:none;">
+      <button class="ctrl-btn active" id="btn-participation" onclick="MeetApp.openParticipationPanel()" title="Participation">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+      </button>
+      <span class="ctrl-tip">Participation</span>
+    </div>
+    <div class="ctrl-wrap" id="ctrl-admin-wrap" style="display:none;">
+      <button class="ctrl-btn active" id="btn-admin" onclick="MeetApp.toggleAdminPanel()" title="Admin">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3"/></svg>
+      </button>
+      <span class="ctrl-tip">Admin</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-rec" onclick="MeetApp.toggleRecord()" title="Enregistrer">
+        <svg id="rec-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"/></svg>
+      </button>
+      <span class="ctrl-tip">Enregistrer</span>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn active" id="btn-mini" onclick="MeetApp.toggleMini()" title="Mini écran">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+          <rect x="13" y="11" width="6" height="4" rx="1" fill="currentColor" stroke="none"></rect>
+        </svg>
+      </button>
+      <span class="ctrl-tip">Mini écran</span>
+    </div>
+    <div class="ctrl-wrap" style="margin-left:8px;">
+      <button class="ctrl-btn danger" id="btn-leave" onclick="MeetApp.leave()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+      <span class="ctrl-tip">Quitter</span>
+    </div>
+  </div>
+</div>
+
+<!-- Reaction bar (dans le body pour éviter tout z-index/clipping) -->
+<div class="meet-reaction-bar" id="reaction-bar">
+  <button class="react-btn" onclick="MeetApp.sendReaction('👍')">👍</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('❤️')">❤️</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('😂')">😂</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('😮‍💨')">😮‍💨</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('💤')">💤</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('🤑')">🤑</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('😮')">😮</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('👏')">👏</button>
+  <button class="react-btn" onclick="MeetApp.sendReaction('🔥')">🔥</button>
+</div>
+
+<!-- Notifications -->
+<div id="meet-notifs"></div>
+
+<!-- Modal info -->
+<div id="info-modal">
+  <div class="info-card">
+    <h3 style="display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4db8d8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> Informations de la réunion</h3>
+    <div class="info-row">
+      <div class="info-label">Lien de partage</div>
+      <div class="info-val">
+        <span id="info-link"></span>
+        <button class="copy-btn" onclick="MeetApp.copy('link')">Copier</button>
+      </div>
+    </div>
+    <div class="info-row" id="info-code-row" style="display:none">
+      <div class="info-label">Code d'accès</div>
+      <div class="info-val">
+        <span id="info-code" style="font-size:22px;font-weight:800;letter-spacing:.15em;"></span>
+        <button class="copy-btn" onclick="MeetApp.copy('code')">Copier</button>
+      </div>
+    </div>
+    <div class="info-row" style="align-items:flex-start;">
+      <div class="info-label">QR code</div>
+      <div class="info-val" style="flex-direction:column;align-items:flex-start;gap:10px;">
+        <img id="info-qr-img" alt="QR code réunion" style="width:150px;height:150px;border-radius:14px;border:1px solid var(--border);background:white;padding:8px;object-fit:contain;" />
+        <a id="info-qr-open" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);text-decoration:none;">Ouvrir le lien</a>
+      </div>
+    </div>
+    <button class="info-close" onclick="document.getElementById('info-modal').classList.remove('open')">Fermer</button>
+  </div>
+</div>
+
+<!-- ── Tableau blanc ── -->
+<div id="whiteboard-modal">
+  <div class="wb-shell">
+    <aside class="wb-left-rail" id="wb-left-rail">
+      <div class="wb-panel-head">
+        <div>
+          <div class="wb-panel-title">Outils du tableau</div>
+          <div class="wb-panel-sub">Recherche, dessin, UI, layouts et actions rapides</div>
+        </div>
+        <button class="wb-icon-btn wb-mobile-toggle" onclick="MeetApp.toggleWbLeftRail()" title="Fermer le panneau outils">✕</button>
+      </div>
+      <div class="wb-search-wrap">
+        <input id="wb-tool-search" class="wb-search" type="search" placeholder="Rechercher un outil, ex. rectangle, card, mobile…" oninput="MeetApp.wbApplyToolSearch(this.value)">
+      </div>
+      <div class="wb-tool-scroll">
+        <section class="wb-group" data-group="essentiels">
+          <div class="wb-group-title">Essentiels</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="select" data-search="select selection déplacer move curseur" onclick="MeetApp.wbTool('select')"><span class="wb-ico">↖</span><span>Sélection</span></button>
+            <button class="wb-tool-btn active" data-tool="pen" data-search="stylo pen dessin libre" onclick="MeetApp.wbTool('pen')"><span class="wb-ico">✏️</span><span>Stylo</span></button>
+            <button class="wb-tool-btn" data-tool="highlighter" data-search="surligneur highlighter marker" onclick="MeetApp.wbTool('highlighter')"><span class="wb-ico">🖍️</span><span>Surligneur</span></button>
+            <button class="wb-tool-btn" data-tool="eraser" data-search="gomme effacer eraser" onclick="MeetApp.wbTool('eraser')"><span class="wb-ico">🧽</span><span>Gomme</span></button>
+            <button class="wb-tool-btn" data-tool="text" data-search="texte text typo" onclick="MeetApp.wbTool('text')"><span class="wb-ico">T</span><span>Texte</span></button>
+          </div>
+        </section>
+        <section class="wb-group" data-group="formes">
+          <div class="wb-group-title">Formes</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="line" data-search="ligne trait" onclick="MeetApp.wbTool('line')"><span class="wb-ico">／</span><span>Ligne</span></button>
+            <button class="wb-tool-btn" data-tool="arrow" data-search="fleche arrow" onclick="MeetApp.wbTool('arrow')"><span class="wb-ico">➜</span><span>Flèche</span></button>
+            <button class="wb-tool-btn" data-tool="rect" data-search="rectangle bloc cardre" onclick="MeetApp.wbTool('rect')"><span class="wb-ico">▭</span><span>Rectangle</span></button>
+            <button class="wb-tool-btn" data-tool="circle" data-search="cercle ellipse rond" onclick="MeetApp.wbTool('circle')"><span class="wb-ico">○</span><span>Cercle</span></button>
+            <button class="wb-tool-btn" data-tool="triangle" data-search="triangle" onclick="MeetApp.wbTool('triangle')"><span class="wb-ico">△</span><span>Triangle</span></button>
+          </div>
+        </section>
+        <section class="wb-group" data-group="ui">
+          <div class="wb-group-title">UI & composants</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="sticker_btn" data-search="button bouton cta" onclick="MeetApp.wbTool('sticker_btn')"><span class="wb-ico">🔘</span><span>Bouton</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_input" data-search="input champ formulaire" onclick="MeetApp.wbTool('sticker_input')"><span class="wb-ico">⌨️</span><span>Input</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_card" data-search="card fiche bloc" onclick="MeetApp.wbTool('sticker_card')"><span class="wb-ico">🪪</span><span>Card</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_avatar" data-search="avatar profil user" onclick="MeetApp.wbTool('sticker_avatar')"><span class="wb-ico">👤</span><span>Avatar</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_image" data-search="image photo media" onclick="MeetApp.wbTool('sticker_image')"><span class="wb-ico">🖼️</span><span>Image</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_nav" data-search="navbar navigation menu header" onclick="MeetApp.wbTool('sticker_nav')"><span class="wb-ico">🧭</span><span>NavBar</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_table" data-search="table tableau grille data" onclick="MeetApp.wbTool('sticker_table')"><span class="wb-ico">📊</span><span>Tableau</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_modal" data-search="modal dialogue popup" onclick="MeetApp.wbTool('sticker_modal')"><span class="wb-ico">🪟</span><span>Modal</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_chart" data-search="chart graphique stats" onclick="MeetApp.wbTool('sticker_chart')"><span class="wb-ico">📈</span><span>Graphique</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_toggle" data-search="toggle switch" onclick="MeetApp.wbTool('sticker_toggle')"><span class="wb-ico">🎚️</span><span>Toggle</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_badge" data-search="badge tag pill" onclick="MeetApp.wbTool('sticker_badge')"><span class="wb-ico">🏷️</span><span>Badge</span></button>
+          </div>
+        </section>
+        <section class="wb-group" data-group="devices">
+          <div class="wb-group-title">Devices</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="sticker_desktop" data-search="desktop ecran ordinateur" onclick="MeetApp.wbTool('sticker_desktop')"><span class="wb-ico">🖥️</span><span>Desktop</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_laptop" data-search="laptop pc portable" onclick="MeetApp.wbTool('sticker_laptop')"><span class="wb-ico">💻</span><span>Laptop</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_mobile" data-search="mobile telephone phone" onclick="MeetApp.wbTool('sticker_mobile')"><span class="wb-ico">📱</span><span>Mobile</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_tablet" data-search="tablet tablette ipad" onclick="MeetApp.wbTool('sticker_tablet')"><span class="wb-ico">📲</span><span>Tablet</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_browser" data-search="browser navigateur web" onclick="MeetApp.wbTool('sticker_browser')"><span class="wb-ico">🌐</span><span>Browser</span></button>
+          </div>
+        </section>
+        <section class="wb-group" data-group="layout">
+          <div class="wb-group-title">Layout</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="sticker_container" data-search="container cadre bloc" onclick="MeetApp.wbTool('sticker_container')"><span class="wb-ico">⬜</span><span>Container</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_section" data-search="section area zone" onclick="MeetApp.wbTool('sticker_section')"><span class="wb-ico">⋯</span><span>Section</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_grid2" data-search="grid 2 colonnes" onclick="MeetApp.wbTool('sticker_grid2')"><span class="wb-ico">⊞</span><span>Grid 2</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_grid3" data-search="grid 3 colonnes" onclick="MeetApp.wbTool('sticker_grid3')"><span class="wb-ico">☷</span><span>Grid 3</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_flexrow" data-search="flex row liste alignement" onclick="MeetApp.wbTool('sticker_flexrow')"><span class="wb-ico">⇆</span><span>Flex Row</span></button>
+          </div>
+        </section>
+        
+        <section class="wb-group" data-group="product">
+          <div class="wb-group-title">Product & flows</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="sticker_hero" data-search="hero banner landing" onclick="MeetApp.wbTool('sticker_hero')"><span class="wb-ico">🦸</span><span>Hero</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_sidebar" data-search="sidebar aside left menu" onclick="MeetApp.wbTool('sticker_sidebar')"><span class="wb-ico">📚</span><span>Sidebar</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_tabs" data-search="tabs onglets navigation" onclick="MeetApp.wbTool('sticker_tabs')"><span class="wb-ico">🗂️</span><span>Tabs</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_checkbox" data-search="checkbox checklist todo" onclick="MeetApp.wbTool('sticker_checkbox')"><span class="wb-ico">☑️</span><span>Checklist</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_list" data-search="list liste items" onclick="MeetApp.wbTool('sticker_list')"><span class="wb-ico">📋</span><span>Liste</span></button>
+          </div>
+        </section>
+        <section class="wb-group" data-group="education">
+          <div class="wb-group-title">Enseignement & facilitation</div>
+          <div class="wb-tool-grid">
+            <button class="wb-tool-btn" data-tool="sticker_note" data-search="note fiche idee" onclick="MeetApp.wbTool('sticker_note')"><span class="wb-ico">📝</span><span>Note</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_sticky" data-search="post it sticky" onclick="MeetApp.wbTool('sticker_sticky')"><span class="wb-ico">📌</span><span>Post-it</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_timeline" data-search="timeline chronologie sequence" onclick="MeetApp.wbTool('sticker_timeline')"><span class="wb-ico">🕒</span><span>Timeline</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_swimlane" data-search="swimlane atelier couloir processus" onclick="MeetApp.wbTool('sticker_swimlane')"><span class="wb-ico">🛣️</span><span>Swimlane</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_rubric" data-search="rubric grille evaluation notation" onclick="MeetApp.wbTool('sticker_rubric')"><span class="wb-ico">✅</span><span>Rubrique</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_lesson" data-search="lesson plan cours formation" onclick="MeetApp.wbTool('sticker_lesson')"><span class="wb-ico">🎓</span><span>Plan cours</span></button>
+            <button class="wb-tool-btn" data-tool="sticker_mindmap" data-search="mindmap carte mentale brainstorming" onclick="MeetApp.wbTool('sticker_mindmap')"><span class="wb-ico">🧠</span><span>Mind map</span></button>
+          </div>
+        </section>
+<section class="wb-group">
+          <div class="wb-group-title">Styles & dimensions</div>
+          <div class="wb-simple-label">Taille du trait</div>
+          <div class="wb-chip-row">
+            <button class="wb-size-btn" data-size="2" onclick="MeetApp.wbSize(2)">S</button>
+            <button class="wb-size-btn active" data-size="4" onclick="MeetApp.wbSize(4)">M</button>
+            <button class="wb-size-btn" data-size="8" onclick="MeetApp.wbSize(8)">L</button>
+            <button class="wb-size-btn" data-size="16" onclick="MeetApp.wbSize(16)">XL</button>
+          </div>
+          <div class="wb-simple-label" style="margin-top:10px;">Couleur</div>
+          <div class="wb-color-row">
+            <button class="wb-color-btn active" data-color="#4db8d8" style="background:#4db8d8;" onclick="MeetApp.wbColor('#4db8d8')"></button>
+            <button class="wb-color-btn" data-color="#ffffff" style="background:#ffffff;" onclick="MeetApp.wbColor('#ffffff')"></button>
+            <button class="wb-color-btn" data-color="#f87171" style="background:#f87171;" onclick="MeetApp.wbColor('#f87171')"></button>
+            <button class="wb-color-btn" data-color="#22c55e" style="background:#22c55e;" onclick="MeetApp.wbColor('#22c55e')"></button>
+            <button class="wb-color-btn" data-color="#f59e0b" style="background:#f59e0b;" onclick="MeetApp.wbColor('#f59e0b')"></button>
+            <button class="wb-color-btn" data-color="#a78bfa" style="background:#a78bfa;" onclick="MeetApp.wbColor('#a78bfa')"></button>
+            <input type="color" value="#4db8d8" onchange="MeetApp.wbColor(this.value)" title="Couleur personnalisée" style="width:28px;height:28px;border-radius:999px;border:2px solid var(--border);cursor:pointer;padding:0;background:none;">
+          </div>
+          <div class="wb-simple-label" style="margin-top:10px;">Fond</div>
+          <div class="wb-bg-row">
+            <button class="wb-color-btn" style="background:#1a2540;border-color:#334155;" onclick="MeetApp.wbBgColor('#1a2540')"></button>
+            <button class="wb-color-btn" style="background:#0f172a;border-color:#334155;" onclick="MeetApp.wbBgColor('#0f172a')"></button>
+            <button class="wb-color-btn" style="background:#ffffff;border-color:#cbd5e1;" onclick="MeetApp.wbBgColor('#ffffff')"></button>
+            <button class="wb-color-btn" style="background:#f1f5f9;border-color:#cbd5e1;" onclick="MeetApp.wbBgColor('#f1f5f9')"></button>
+          </div>
+          <div class="wb-inline-fields" style="margin-top:10px;">
+            <div class="wb-inline-field">
+              <label>Largeur</label>
+              <input id="wb-w-input" type="number" min="10" max="2000" value="160" oninput="MeetApp.wbSetW(this.value)">
+            </div>
+            <div class="wb-inline-field">
+              <label>Hauteur</label>
+              <input id="wb-h-input" type="number" min="10" max="2000" value="80" oninput="MeetApp.wbSetH(this.value)">
+            </div>
+          </div>
+        </section>
+        <section class="wb-group">
+          <div class="wb-group-title">Actions</div>
+          <div class="wb-chip-row">
+            <button class="wb-action-btn" onclick="MeetApp.wbUndo()">↩ Annuler</button>
+            <button class="wb-action-btn" onclick="MeetApp.wbRedo()">↪ Rétablir</button>
+            <button class="wb-action-btn" onclick="MeetApp.wbImportImage()">🖼 Importer</button>
+            <button class="wb-action-btn" onclick="MeetApp.wbExport(document.getElementById('wb-export-format')?.value || 'png')">↓ Export</button>
+            <button class="wb-action-btn" onclick="MeetApp.wbClear()" style="color:#f87171;border-color:rgba(248,113,113,.25);">🗑 Effacer</button>
+          </div>
+        </section>
+      </div>
+      <div class="wb-bottom-hint">Astuce : après insertion d’un élément, le mode passe automatiquement sur <strong>Sélection</strong>. Ctrl/Cmd + A sélectionne tout, Delete supprime la sélection, et un double-clic centre/zoome sur l’objet.</div>
+    </aside>
+
+    <section class="wb-center-stage">
+      <div class="wb-topbar">
+        <div class="wb-topbar-left">
+          <button class="wb-icon-btn wb-mobile-toggle" onclick="MeetApp.toggleWbLeftRail()" title="Outils">☰</button>
+          <div class="wb-title-stack">
+            <div style="display:flex;align-items:center;gap:8px;"><button class="wb-icon-btn" onclick="location.href='/mail'" title="Retour à la messagerie">←</button><h3 style="margin:0;">Tableau blanc collaboratif</h3></div>
+            <p>UX optimisée, composants UI, curseurs temps réel, export multi-format et propriétés avancées</p>
+          </div>
+        </div>
+        <div class="wb-topbar-right" style="position:relative;">
+          <select id="wb-export-format" class="wb-export-select" title="Choisir le format d'export">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WEBP</option>
+            <option value="pdf">PDF</option>
+          </select>
+          <button class="wb-icon-btn" onclick="MeetApp.wbZoomOut()" title="Dézoomer">－</button><div id="wb-zoom-pct" class="wb-status-pill" data-mode="shared">100%</div><button class="wb-icon-btn" onclick="MeetApp.wbZoomIn()" title="Zoomer">＋</button><button class="wb-action-btn" onclick="MeetApp.wbExport(document.getElementById('wb-export-format')?.value || 'png')" title="Exporter le tableau">Exporter</button>
+          <button class="wb-icon-btn" onclick="MeetApp.wbOpenSettings()" title="Paramètres du tableau">⚙</button>
+          <div id="wb-lock-status" class="wb-status-pill" data-mode="shared">Partagé</div>
+          <button id="wb-lock-btn" class="wb-action-btn" onclick="MeetApp.wbOpenAccessMenu()" title="Mode d'accès au tableau">Partage</button>
+          <button class="wb-icon-btn wb-mobile-toggle" onclick="MeetApp.toggleWbRightRail()" title="Propriétés">☷</button>
+          <button type="button" class="wb-action-btn wbai-open-btn" onclick="WbAI.open()" title="Demander à l'IA de dessiner">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
+            IA
+          </button>
+          <button class="wb-icon-btn" onclick="MeetApp.toggleWhiteboard()" title="Fermer le tableau">✕</button>
+        </div>
+      </div>
+      <div class="wb-canvas-stage">
+        <div class="wb-canvas-frame">
+          <div id="wb-canvas-scroll">
+            <div id="wb-canvas-inner">
+              <canvas id="wb-canvas"></canvas>
+              <div id="wb-cursor-layer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="wb-right-rail" id="wb-right-rail">
+      <div class="wb-rail-tabs" role="tablist">
+        <button type="button" class="wb-rail-tab active" data-tab="props" role="tab" onclick="WbAI.showTab('props')">Propriétés</button>
+        <button type="button" class="wb-rail-tab" data-tab="ai" role="tab" onclick="WbAI.showTab('ai')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>
+          Assistant IA
+        </button>
+      </div>
+
+      <div id="wb-tab-props" class="wb-tab-body">
+        <div class="wb-panel-head">
+          <div>
+            <div class="wb-panel-title">Propriétés</div>
+            <div class="wb-panel-sub">Sélectionnez un élément pour l’éditer finement</div>
+          </div>
+          <button class="wb-icon-btn wb-mobile-toggle" onclick="MeetApp.toggleWbRightRail()" title="Fermer le panneau propriétés">✕</button>
+        </div>
+        <div id="wb-props-panel"><div class="wb-props-empty">Aucun élément sélectionné pour le moment. Cliquez sur un objet ou déposez-en un sur le tableau pour voir ses réglages.</div></div>
+      </div>
+
+      <div id="wb-tab-ai" class="wb-tab-body wbai" hidden>
+        <div class="wb-panel-head">
+          <div>
+            <div class="wb-panel-title">Assistant dessin</div>
+            <div class="wb-panel-sub">Décrivez, l’IA dessine pour tous les participants</div>
+          </div>
+          <button type="button" class="wb-icon-btn" onclick="WbAI.clearConversation()" title="Effacer la conversation (le tableau n'est pas modifié)" aria-label="Effacer la conversation" style="width:30px;height:30px;font-size:11px;">⟲</button>
+          <button class="wb-icon-btn wb-mobile-toggle" onclick="MeetApp.toggleWbRightRail()" title="Fermer le panneau">✕</button>
+        </div>
+        <div class="wbai-msgs" id="wbai-msgs">
+          <div class="wbai-welcome" id="wbai-welcome">
+            <div class="wbai-welcome-title">Que voulez-vous dessiner&nbsp;?</div>
+            <div class="wbai-welcome-text">Schémas, organigrammes, flux, cartes mentales, plannings… Le dessin apparaît chez tout le monde et reste modifiable.</div>
+            <div class="wbai-chips">
+              <button type="button" onclick="WbAI.suggest('Un organigramme simple d\'une équipe projet avec un chef de projet et trois équipes')">Organigramme</button>
+              <button type="button" onclick="WbAI.suggest('Un schéma de processus en 5 étapes avec des flèches')">Processus en étapes</button>
+              <button type="button" onclick="WbAI.suggest('Une carte mentale avec une idée centrale et 5 branches')">Carte mentale</button>
+              <button type="button" onclick="WbAI.suggest('Un planning de la semaine du lundi au vendredi en colonnes')">Planning semaine</button>
+            </div>
+          </div>
+        </div>
+        <div class="wbai-composer">
+          <textarea id="wbai-input" rows="2" maxlength="600" placeholder="Ex : un schéma de l’architecture du projet" onkeydown="WbAI.onKey(event)"></textarea>
+          <button type="button" id="wbai-send" onclick="WbAI.send()" title="Envoyer à l’IA" aria-label="Envoyer à l’IA">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ── Modale avis réunion ── -->
+<div id="review-modal">
+  <div class="review-card">
+    <div style="text-align:center;margin-bottom:8px;">
+      <div style="font-size:32px;margin-bottom:12px;display:flex;justify-content:center;"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+      <div style="font-size:18px;font-weight:800;color:var(--text1);margin-bottom:6px;">La réunion est terminée</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;">Comment s'est passée cette réunion ?<br>Votre avis nous aide à améliorer le service.</div>
+    </div>
+
+    <div class="review-stars" id="review-stars">
+      <button class="star-btn" data-v="1" onclick="MeetApp.setRating(1)"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <button class="star-btn" data-v="2" onclick="MeetApp.setRating(2)"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <button class="star-btn" data-v="3" onclick="MeetApp.setRating(3)"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <button class="star-btn" data-v="4" onclick="MeetApp.setRating(4)"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      <button class="star-btn" data-v="5" onclick="MeetApp.setRating(5)"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+    </div>
+    <div id="rating-label" style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:16px;min-height:20px;"></div>
+
+    <textarea class="review-comment" id="review-comment" rows="3"
+      placeholder="Comment pourrions-nous améliorer le service ? (optionnel)"></textarea>
+
+    <div style="display:flex;gap:10px;">
+      <button onclick="MeetApp.skipReview()"
+        style="flex:1;padding:11px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
+        Passer
+      </button>
+      <button id="review-submit-btn" onclick="MeetApp.submitReview()" disabled
+        style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--accent),#024a6a);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sora',sans-serif;opacity:.5;transition:opacity .2s;">
+        Envoyer mon avis
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+<script>
+window.MEET_CONFIG = {
+  MEETING_ID:      '<%= meeting.id %>',
+  MEETING_CODE:    '<%= meeting.code || "" %>',
+  PARENT_MEETING_ID: '<%= meeting.parent_meeting_id || "" %>',
+  BREAKOUT_LABEL:  '<%= meeting.breakout_label || "" %>',
+  USER_EMAIL:      '<%= userEmail || "" %>',
+  IS_HOST:         '<%= (meeting.host||"").trim().toLowerCase() %>' === '<%= (userEmail||"").trim().toLowerCase() %>',
+  NEEDS_CODE:      <%= locals.needsCode ? 'true' : 'false' %>,
+  IS_GUEST:        <%= locals.isGuest   ? 'true' : 'false' %>,
+  REVIEWS_ENABLED: <%= process.env.ENABLE_REVIEWS === 'true' ? 'true' : 'false' %>,
+};
+</script>
+
+<script src="/vendor/mediasoup-client.bundle.js"></script>
+<script src="/js/meeting/meeting-state.js"></script>
+<script src="/js/meeting/meeting-utils.js"></script>
+<script src="/js/meeting/meeting-webrtc.js"></script>
+<script src="/js/meeting/meeting-bgblur.js"></script>
+<script src="/js/meeting/meeting-breakout.js"></script>
+<script src="/js/meeting/meeting-lobby.js"></script>
+<script src="/js/meeting/meeting-socket.js"></script>
+<script src="/js/meeting/meeting-controls.js"></script>
+<script src="/js/meeting/meeting-chat.js"></script>
+<script src="/js/meeting/whiteboard-perf.js"></script>
+<script src="/js/meeting/whiteboard-engine.js"></script>
+<script src="/js/meeting/meeting-features.js"></script>
+<script src="/js/meeting/meeting-whiteboard-images.js"></script>
+<script src="/js/meeting/meeting-whiteboard-ai.js"></script>
+<script src="/js/meeting/meeting-captions.js"></script>
+<script src="/js/meeting/meeting-ai-extras.js"></script>
+
+<script>
+(function bootstrapMeetingApp() {
+  const g = window;
+
+  if (typeof g.toggleScreen !== 'function' && typeof g.toggleScreenShare === 'function') {
+    g.toggleScreen = g.toggleScreenShare;
+  }
+  if (typeof g.toggleScreenShare !== 'function' && typeof g.toggleScreen === 'function') {
+    g.toggleScreenShare = g.toggleScreen;
+  }
+
+  if (typeof g.openWhiteboard !== 'function' && typeof g.toggleWhiteboard === 'function') {
+    g.openWhiteboard = g.toggleWhiteboard;
+  }
+  if (typeof g.clearWhiteboard !== 'function' && typeof g.wbClear === 'function') {
+    g.clearWhiteboard = g.wbClear;
+  }
+  if (typeof g.setWbTool !== 'function' && typeof g.wbTool === 'function') {
+    g.setWbTool = g.wbTool;
+  }
+  if (typeof g.setWbColor !== 'function' && typeof g.wbColor === 'function') {
+    g.setWbColor = g.wbColor;
+  }
+  if (typeof g.setWbSize !== 'function' && typeof g.wbSize === 'function') {
+    g.setWbSize = g.wbSize;
+  }
+
+  const fallback = (name) => function(...args) {
+    console.warn(`[MeetApp] Fonction indisponible: ${name}`);
+    if (typeof g.notify === 'function') g.notify(`Fonction indisponible: ${name}`);
+    return undefined;
+  };
+  const pick = (...names) => {
+    for (const name of names) {
+      if (typeof g[name] === 'function') return g[name];
+    }
+    return fallback(names[0]);
+  };
+
+  g.MeetApp = {
+    toggleLobbyMic: pick('toggleLobbyMic'),
+    toggleLobbyCam: pick('toggleLobbyCam'),
+    joinRoom: pick('joinRoom'),
+    admitWaiting: pick('admitWaiting'),
+    rejectWaiting: pick('rejectWaiting'),
+
+    toggleMic: pick('toggleMic'),
+    toggleCam: pick('toggleCam'),
+    toggleHand: pick('toggleHand'),
+    toggleScreen: pick('toggleScreenShare', 'toggleScreen'),
+    toggleBackgroundBlur: pick('toggleBackgroundBlur'),
+    toggleRecord: pick('toggleRecord'),
+    toggleMini: pick('toggleMini'),
+    toggleWhiteboard: pick('toggleWhiteboard'),
+    openWhiteboard: pick('openWhiteboard', 'toggleWhiteboard'),
+    togglePin: pick('togglePin'),
+    toggleCaptions: pick('toggleCaptions'),
+
+    toggleChat: pick('toggleChat'),
+    switchTab: pick('switchTab'),
+    toggleReactions: pick('toggleReactions'),
+    toggleTheme: pick('toggleTheme'),
+    openParticipationPanel: pick('openParticipationPanel'),
+    closeParticipationPanel: pick('closeParticipationPanel'),
+    toggleParticipationPanel: pick('toggleParticipationPanel'),
+    switchParticipationTab: pick('switchParticipationTab'),
+    toggleBitrateReduction: pick('toggleBitrateReduction'),
+    openAdminPanel: pick('openAdminPanel'),
+    closeAdminPanel: pick('closeAdminPanel'),
+    toggleAdminPanel: pick('toggleAdminPanel'),
+    switchAdminTab: pick('switchAdminTab'),
+
+    sendReaction: pick('sendReaction'),
+    showInfo: pick('showInfo'),
+    copy: pick('copy'),
+    copyMeetingLink: pick('copyMeetingLink'),
+
+    sendChat: pick('sendChat'),
+    sendFile: pick('sendFile'),
+    meetingChatHandleDownload: pick('meetingChatHandleDownload'),
+
+    leave: pick('leave'),
+    confirmLeave: pick('confirmLeave'),
+
+    setRating: pick('setRating'),
+    submitReview: pick('submitReview'),
+    skipReview: pick('skipReview'),
+
+    hostMutePeer: pick('hostMutePeer'),
+    toggleCatalyst: pick('toggleCatalyst'),
+    extendMeeting: pick('extendMeeting'),
+    moveParticipantToWaiting: pick('moveParticipantToWaiting'),
+    removeParticipant: pick('removeParticipant'),
+    banParticipant: pick('banParticipant'),
+    lockMeeting: pick('lockMeeting'),
+    muteAllParticipants: pick('muteAllParticipants'),
+    updateParticipantPermissions: pick('updateParticipantPermissions'),
+    toggleParticipantPermission: pick('toggleParticipantPermission'),
+    allowParticipantToSpeak: pick('allowParticipantToSpeak'),
+    tempExpelParticipant: pick('tempExpelParticipant'),
+
+    exportNotes: pick('exportNotes'),
+
+    addPollOption: pick('addPollOption'),
+    launchPoll: pick('launchPoll'),
+    castVote: pick('castVote'),
+    newPoll: pick('newPoll'),
+    endPoll: pick('endPoll'),
+
+    wbTool: pick('wbTool'),
+    wbColor: pick('wbColor'),
+    wbBgColor: pick('wbBgColor'),
+    wbSize: pick('wbSize'),
+    wbClear: pick('wbClear'),
+    wbExport: pick('wbExport'),
+    wbImportImage: pick('wbImportImage'),
+    wbUndo: pick('wbUndo'),
+    wbRedo: pick('wbRedo'),
+    wbSetW: pick('wbSetW'),
+    wbSetH: pick('wbSetH'),
+    wbSetSelectedDimensions: pick('wbSetSelectedDimensions'),
+    wbUpdateProp: pick('wbUpdateProp'),
+    wbDeleteObj: pick('wbDeleteObj'),
+    wbDuplicateObj: pick('wbDuplicateObj'),
+    wbBringFront: pick('wbBringFront'),
+    wbSendBack: pick('wbSendBack'),
+    hideWbProperties: pick('hideWbProperties'),
+    setWbTool: pick('setWbTool', 'wbTool'),
+    setWbColor: pick('setWbColor', 'wbColor'),
+    setWbSize: pick('setWbSize', 'wbSize'),
+    clearWhiteboard: pick('clearWhiteboard', 'wbClear'),
+    wbToggleLock: pick('wbToggleLock'),
+    wbOpenAccessMenu: pick('wbOpenAccessMenu'),
+    wbSetAccessMode: pick('wbSetAccessMode'),
+    wbOpenSettings: pick('wbOpenSettings'),
+    wbZoomIn: pick('wbZoomIn'),
+    wbZoomOut: pick('wbZoomOut'),
+    wbZoomReset: pick('wbZoomReset'),
+    wbCenterSelection: pick('wbCenterSelection'),
+    wbInsertTemplate: pick('wbInsertTemplate'),
+    wbSetCursorScale: pick('wbSetCursorScale'),
+    wbApplyBoardTheme: pick('wbApplyBoardTheme'),
+    wbApplyToolSearch: pick('wbApplyToolSearch'),
+    toggleWbLeftRail: pick('toggleWbLeftRail'),
+    toggleWbRightRail: pick('toggleWbRightRail'),
+
+    openPopcornLauncher: pick('openPopcornLauncher'),
+    openBreakoutPanel: pick('openBreakoutPanel'),
+    launchPopcorn: pick('launchPopcorn'),
+    submitPopcornAnswer: pick('submitPopcornAnswer'),
+
+    openQuizCreator: pick('openQuizCreator'),
+    launchQuiz: pick('launchQuiz'),
+    submitQuizVote: pick('submitQuizVote'),
+
+    setSpeechLimit: pick('setSpeechLimit'),
+    openSpeakLimit: pick('openSpeakLimit'),
+
+    sendAIMessage: pick('sendAIMessage'),
+    clearAIChat: pick('clearAIChat'),
+    generateSummary: pick('generateSummary')
+  };
+
+  const theme = localStorage.getItem('ts_theme') || 'dark';
+  if (typeof g.applyMeetTheme === 'function') g.applyMeetTheme(theme);
+  if (typeof g.initLobby === 'function') g.initLobby();
+
+  document.getElementById('lctrl-mic-btn')?.addEventListener('click', g.MeetApp.toggleLobbyMic);
+  document.getElementById('lctrl-cam-btn')?.addEventListener('click', g.MeetApp.toggleLobbyCam);
+  document.getElementById('btn-join')?.addEventListener('click', g.MeetApp.joinRoom);
+  document.getElementById('lobby-copy-btn')?.addEventListener('click', g.MeetApp.copyMeetingLink);
+})();
+</script>
+</body>
+</html>

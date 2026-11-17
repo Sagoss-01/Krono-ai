@@ -1,0 +1,15 @@
+Tu as déjà un panneau “Participation”. Le plus propre est d’ajouter un mini état audio dans ce même panneau, ligne par ligne :
+
+type ICE sélectionné : host, srflx, relay, prflx
+RTT
+packets lost
+jitter
+état de connexion
+
+Exemple d’état simple :
+
+vert : RTT < 0,15 s et peu de pertes
+orange : RTT entre 0,15 et 0,40 s
+rouge : RTT > 0,40 s ou pertes élevées
+
+Ça te permettra de répondre à “on ne t’entend pas” avec des faits, pas des suppositions.

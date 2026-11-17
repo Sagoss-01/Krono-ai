@@ -1,0 +1,162 @@
+﻿==============================================================================
+KRONO AI — JOURNAL DES ERREURS ET RESOLUTIONS (solute.txt)
+==============================================================================
+
+------------------------------------------------------------------------------
+ERREUR #1 — "Impossible de joindre le serveur (http://127.0.0.1:8000)"
+------------------------------------------------------------------------------
+
+DATE           : 2026-08-24
+FONCTIONNALITE : Ajout manuel d'evenement (modal "Nouvel Evenement")
+SEVERITE       : Critique (bloquante — aucune sauvegarde possible)
+
+DESCRIPTION DE L'ERREUR
+------------------------
+Lorsque l'utilisateur remplit le formulaire d'ajout manuel d'evenement
+(titre, date, heure debut, heure fin, type de contrainte, description) et
+clique sur "Creer l'evenement", une banniere d'erreur rouge s'affiche en
+haut de la modal :
+
+  "Impossible de joindre le serveur (http://127.0.0.1:8000).
+   Verifiez que le backend tourne sur ce port."
+
+SYMPTOMES OBSERVES
+------------------
+- La banniere rouge apparait immediatement apres soumission.
+- L'evenement n'est pas cree ni en base de donnees ni en local.
+- Aucune notification toast "Evenement cree" n'apparait.
+- Le calendrier hebdomadaire n'est pas rafraichi.
+
+CAUSE RACINE
+------------
+Le serveur backend FastAPI (uvicorn) N'ETAIT PAS EN COURS D'EXECUTION au
+moment de la soumission du formulaire.
+
+Quand le navigateur emet une requete HTTP vers une adresse ou rien n'ecoute,
+JavaScript leve une exception de type "Failed to fetch" (ou "NetworkError").
+
+Le handler handleCreateEvent dans front/src/App.jsx (ligne ~305) capture
+correctement cette exception et affiche le message localise :
+
+  if (err.message === "Failed to fetch" || err.message.includes("NetworkError")
+      || err.message.includes("fetch")) {
+    setModalError("Impossible de joindre le serveur (" + getApiUrl() + ").
+                   Verifiez que le backend tourne sur ce port.");
+  }
+
+ORIGINE / FLUX D'APPEL
+-----------------------
+  [Modal Form] -> handleCreateEvent() [App.jsx:285]
+      -> api.createEvent() [api.js:88]
+          -> fetch("http://127.0.0.1:8000/scheduler/events", POST)
+              -> ECHEC: connexion refusee (backend absent)
+                  -> "Failed to fetch"
+                      -> setModalError(message localise)
+
+ETAT DE L'IMPLEMENTATION (VERIFICATION)
+-----------------------------------------
+L'implementation de la fonctionnalite est CORRECTE et COMPLETE :
+
+  Frontend (front/src/App.jsx) :
+    [OK] Etats : modalTitle, modalDate, modalStartTime, modalEndTime,
+              modalConstraint, modalDescription, modalLoading, modalError
+    [OK] Handler : handleCreateEvent() construit startISO / endISO et appelle
+                api.createEvent()
+    [OK] Gestion d'erreur reseau : message localise affiche dans la modal
+    [OK] Succes : toast notification + fermeture modal + rechargement des events
+
+  Frontend (front/src/api.js) :
+    [OK] api.createEvent(title, startTime, endTime, constraintType, description)
+      -> POST /scheduler/events avec le corps JSON attendu
+
+  Backend (backend/scheduler/routes.py) :
+    [OK] POST /scheduler/events -> create_event_manual()
+    [OK] Validation : start_time < end_time, constraint_type valide
+    [OK] Sauvegarde en base SQLite avec owner_id = utilisateur courant
+    [OK] Reponse : EventOut (id, title, start_time, end_time, ...)
+
+  Backend (backend/models/schemas.py) :
+    [OK] EventCreate : title, start_time(datetime), end_time(datetime),
+                    location?, description?, constraint_type(="soft")
+    [OK] Format ISO attendu : "2026-07-06T09:00:00" — genere correctement
+      par le frontend : modalDate + "T" + modalStartTime + ":00"
+
+  Backend (backend/main.py) :
+    [OK] CORS ouvert (*) — pas de blocage cross-origin
+    [OK] scheduler_router inclus sous le prefixe /scheduler
+
+RESOLUTION APPLIQUEE
+---------------------
+Demarrage du serveur backend avec la commande :
+
+  uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+Verification des endpoints apres demarrage :
+  GET  http://127.0.0.1:8000/          -> 200 OK  (serveur en ligne)
+  POST http://127.0.0.1:8000/scheduler/events (sans token) -> 401 Unauthorized
+       (normal : endpoint existe et requiert authentification JWT)
+
+COMMENT EVITER CE PROBLEME A L'AVENIR
+---------------------------------------
+1. Toujours demarrer le backend AVANT d'ouvrir le frontend :
+     uvicorn backend.main:app --reload
+
+2. Optionnel : ajouter un script de demarrage unique (package.json "dev:all")
+   qui lance backend + frontend en parallele.
+
+3. L'indicateur isOffline dans App.jsx pourrait etre etendu pour detecter
+   l'indisponibilite du backend specifiquement (ping sur /health) et prevenir
+   l'utilisateur avant meme qu'il ne soumette le formulaire.
+
+------------------------------------------------------------------------------
+ERREUR #2 — Agent Langgraph : format de temps corrompu par Gemini
+------------------------------------------------------------------------------
+
+DATE           : 2026-08-24
+FONCTIONNALITE : Agent conversationnel (traitement NLP -> creation d'evenement)
+SEVERITE       : Haute (l'agent ne cree pas l'evenement meme si l'IA repond)
+
+DESCRIPTION
+-----------
+Le noeud de l'agent Langgraph retourne le message :
+  "Format de date/heure invalide dans l'intention :
+   Invalid isoformat string: '2026-07-07T12:00 Lichtenstein duration_minutes 60'"
+
+L'intention extraite montre un champ "time" corrompu :
+  'time': '12:00 Lichtenstein duration_minutes 60'
+
+CAUSE RACINE
+------------
+Le modele Gemini genere une reponse JSON mal formee ou le champ "time"
+contient du texte parasite (hallucination de tokens) au lieu de la valeur
+pure "HH:MM:SS". C'est un probleme de parsing/nettoyage de la sortie LLM
+dans backend/ai/gemini_client.py ou backend/ai/nlp_service.py.
+
+ORIGINE
+-------
+  [Agent graph] -> noeud parse_intent -> parse_natural_language_task()
+      -> appel Gemini API
+          -> JSON retourne avec "time": "12:00 Lichtenstein duration_minutes 60"
+              -> construction de l'ISO : "2026-07-07T12:00 Lichtenstein..."
+                  -> datetime.fromisoformat() echoue
+                      -> status: "error"
+
+RESOLUTION RECOMMANDEE
+-----------------------
+1. Renforcer le prompt systeme pour exiger un JSON strict :
+     "Retourne UNIQUEMENT un objet JSON valide, sans texte autour."
+
+2. Valider/nettoyer le champ "time" avec une regex avant de l'utiliser :
+     import re
+     match = re.match(r'\d{2}:\d{2}(:\d{2})?', raw_time_value)
+     if match:
+         time = match.group(0)
+
+3. Utiliser response_mime_type="application/json" dans l'appel Gemini
+   pour forcer un output JSON natif et eviter les tokens parasites.
+
+STATUT      : Identifiee — a corriger dans backend/ai/gemini_client.py
+
+==============================================================================
+FIN DU JOURNAL
+==============================================================================

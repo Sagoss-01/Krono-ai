@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;family=Hanken+Grotesk:wght@500;600;700&amp;family=Geist:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "inverse-primary": "#c8c6c5",
+                "on-surface-variant": "#444748",
+                "primary-container": "#1c1b1b",
+                "tertiary-fixed-dim": "#cac6c3",
+                "outline": "#747878",
+                "primary-fixed": "#e5e2e1",
+                "on-secondary": "#ffffff",
+                "surface-container-highest": "#e5e2e1",
+                "on-secondary-fixed-variant": "#003fa4",
+                "surface-bright": "#fdf8f8",
+                "on-surface": "#1c1b1b",
+                "on-tertiary-container": "#868381",
+                "secondary-container": "#0266ff",
+                "error-container": "#ffdad6",
+                "surface-container-low": "#f7f3f2",
+                "on-primary-container": "#858383",
+                "on-error-container": "#93000a",
+                "surface-container": "#f1edec",
+                "surface-container-high": "#ebe7e6",
+                "secondary-fixed-dim": "#b3c5ff",
+                "surface-tint": "#5f5e5e",
+                "tertiary-fixed": "#e6e1df",
+                "on-primary-fixed": "#1c1b1b",
+                "error": "#ba1a1a",
+                "tertiary": "#000000",
+                "on-background": "#1c1b1b",
+                "inverse-on-surface": "#f4f0ef",
+                "surface-dim": "#ddd9d8",
+                "outline-variant": "#c4c7c7",
+                "surface-container-lowest": "#ffffff",
+                "on-secondary-fixed": "#001849",
+                "background": "#fdf8f8",
+                "tertiary-container": "#1c1b1a",
+                "on-tertiary-fixed-variant": "#484645",
+                "primary-fixed-dim": "#c8c6c5",
+                "on-error": "#ffffff",
+                "inverse-surface": "#313030",
+                "on-secondary-container": "#f9f7ff",
+                "on-primary-fixed-variant": "#474646",
+                "surface-variant": "#e5e2e1",
+                "secondary-fixed": "#dae1ff",
+                "secondary": "#0050cc",
+                "on-primary": "#ffffff",
+                "on-tertiary-fixed": "#1c1b1a",
+                "primary": "#000000",
+                "on-tertiary": "#ffffff",
+                "surface": "#fdf8f8"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.125rem",
+                "lg": "0.25rem",
+                "xl": "0.5rem",
+                "full": "0.75rem"
+            },
+            "spacing": {
+                "gutter": "24px",
+                "sm": "8px",
+                "md": "16px",
+                "xs": "4px",
+                "margin": "32px",
+                "lg": "24px",
+                "xl": "40px",
+                "unit": "4px",
+                "container-max": "1280px"
+            },
+            "fontFamily": {
+                "body-md": ["Inter"],
+                "label-sm": ["Geist"],
+                "display-lg": ["Hanken Grotesk"],
+                "headline-lg-mobile": ["Hanken Grotesk"],
+                "title-md": ["Hanken Grotesk"],
+                "body-lg": ["Inter"],
+                "headline-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                "label-sm": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                "title-md": ["20px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                "body-lg": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #fdf8f8; color: #1c1b1b; }
+        .blueprint-label { font-family: 'Geist'; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: #747878; }
+        .settings-card { border: 1px solid #E5E5E5; transition: all 0.2s ease; }
+        .settings-card:hover { border-color: #000000; }
+        .custom-toggle:checked + .toggle-bg { background-color: #0050cc; }
+        .custom-toggle:checked + .toggle-bg .toggle-dot { transform: translateX(20px); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+<!-- Top Navigation Bar -->
+<header class="bg-surface/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/30 flex justify-between items-center px-gutter h-16">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary tracking-tight">Atelier AI</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity cursor-pointer">notifications</span>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/30">
+<img class="w-full h-full object-cover" data-alt="A professional and sleek headshot of a creative professional in a high-end minimalist studio. The lighting is soft and architectural, casting gentle shadows that emphasize a focused, intelligent expression. The color palette is strictly monochromatic with soft whites and deep charcoal tones, perfectly aligning with the Digital Atelier aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDOe_T-1hJL0qEpvOrjK3l3XYxPIFJpJJgU0FpxXPXC-kqzpWm1O3nmwSVOr1Cm4MRTkH0m_tQw7kFaZGjgcalK76kz64CVy1IvAZqPxLFcNaujtHefn61-eRSfzhw7LvzNZhbt183erpTlXuKdj_u9a7xD8xO2c4GhvdSUjzzOqCVB_mieabP2e5DjQlGYVnk_cIdyGD0ZD5F3riwfYEqORHGZwgcactcrHTmuJKrfqfTG7o97Kp62A65B9OcXLrI094f4pgyufVE"/>
+</div>
+</div>
+</header>
+<main class="pt-24 px-gutter max-w-container-max mx-auto">
+<!-- Section 1: User Header -->
+<section class="mb-xl">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-outline-variant/20">
+<div class="flex items-center gap-6">
+<div class="relative group">
+<div class="w-24 h-24 rounded-full bg-surface-container overflow-hidden border-2 border-primary ring-4 ring-background">
+<img class="w-full h-full object-cover" data-alt="A minimalist portrait of a modern digital architect, centered against a neutral off-white background. The lighting is crisp and functional, resembling a high-end fashion editorial. The subject is wearing a simple black turtleneck, embodying professional craft and technological fluency. The image is clean, high-contrast, and feels like a premium stationery brand aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPzkAu5T4pIZCqgSbvuhW1qxRsyMAizHZ3lnoOTZxHiQSUn0EwNNzOb5A2SwRpgXrHZEBRzg67RG3P2NdYQzWNhOdvwsG4FI-wCkTG2HbEuWxpvB7kbL17LKckzUJHpBYqIhACQJHvV4LHhxWMAC5Xb_zmdH6uWJL0eRShrMPPsU6rWgyL1YlVcn-1u6OlUO71jqNR3XUSoj6emUHxb11l16xMVOqFwPKzsw_sS5AcHZwD3Or9N5_TF0E1-R52iyogjBEXeM3IBa4"/>
+</div>
+<button class="absolute bottom-0 right-0 bg-primary text-on-primary w-8 h-8 rounded-full flex items-center justify-center border-2 border-background active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-outline mb-1 block uppercase">Primary Profile</span>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Julian Thorne</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">julian.thorne@atelier.ai</p>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2 bg-primary text-on-primary font-label-sm text-label-sm rounded-lg hover:opacity-90 active:scale-95 transition-all">Edit Profile</button>
+<button class="px-6 py-2 border border-outline text-on-surface font-label-sm text-label-sm rounded-lg hover:bg-surface-container transition-all">Sign Out</button>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-xl">
+<!-- Left Column: Settings Navigation -->
+<div class="lg:col-span-8 space-y-xl">
+<!-- Section 2: Account Settings -->
+<div>
+<div class="mb-md flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">Account &amp; Subscription</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl settings-card overflow-hidden">
+<button class="w-full flex items-center justify-between p-lg hover:bg-surface-container-low transition-colors group border-b border-outline-variant/10">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant">person_outline</span>
+<div class="text-left">
+<p class="font-body-lg text-body-lg text-on-surface">Personal Information</p>
+<p class="font-body-md text-body-md text-on-surface-variant">Update your bio, name, and location</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-lg hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary">workspace_premium</span>
+<div class="text-left">
+<p class="font-body-lg text-body-lg text-on-surface flex items-center gap-2">Atelier Pro <span class="bg-secondary-container text-on-secondary-container text-[10px] px-2 py-0.5 rounded-full font-label-sm">ACTIVE</span></p>
+<p class="font-body-md text-body-md text-on-surface-variant">Manage billing and subscription plan</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:translate-x-1 transition-transform">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Section 3: AI Preferences -->
+<div>
+<div class="mb-md flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">AI Engine Logic</span>
+<div class="h-px flex-1 bg-outline-variant/30"></div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl settings-card p-lg space-y-lg relative overflow-hidden">
+<!-- AI Decorative Mesh Gradient -->
+<div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-secondary/5 to-transparent pointer-events-none -mr-32 -mt-32 blur-3xl"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary">auto_awesome</span>
+<div>
+<p class="font-body-lg text-body-lg text-on-surface">Optimization Aggressiveness</p>
+<p class="font-body-md text-body-md text-on-surface-variant">How strictly the AI reorganizes your schedule</p>
+</div>
+</div>
+<div class="bg-surface-container rounded-full p-1 flex gap-1 border border-outline-variant/30">
+<button class="px-4 py-1.5 rounded-full font-label-sm text-label-sm transition-all bg-surface-container-lowest text-on-surface shadow-sm" id="btn-conservative" onclick="setAggressiveness('conservative')">Conservative</button>
+<button class="px-4 py-1.5 rounded-full font-label-sm text-label-sm transition-all text-on-surface-variant hover:text-on-surface" id="btn-aggressive" onclick="setAggressiveness('aggressive')">Aggressive</button>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant">record_voice_over</span>
+<div>
+<p class="font-body-lg text-body-lg text-on-surface">Voice Model</p>
+<p class="font-body-md text-body-md text-on-surface-variant">The personality of your scheduling assistant</p>
+</div>
+</div>
+<select class="bg-transparent border-none font-body-md text-on-surface text-right focus:ring-0 cursor-pointer">
+<option>Aria (Balanced)</option>
+<option>Atlas (Direct)</option>
+<option>Lyra (Empathetic)</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Section 4: Notifications -->
+<div>
+<div class="mb-md flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">Communication</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl settings-card p-lg space-y-lg">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant">warning</span>
+<div>
+<p class="font-body-lg text-body-lg text-on-surface">Conflict Alerts</p>
+<p class="font-body-md text-body-md text-on-surface-variant">Immediate notification for scheduling overlaps</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only custom-toggle" type="checkbox"/>
+<div class="toggle-bg w-11 h-6 bg-surface-container-high rounded-full transition-colors relative">
+<div class="toggle-dot absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform"></div>
+</div>
+</label>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant">schedule</span>
+<div>
+<p class="font-body-lg text-body-lg text-on-surface">Morning Briefing</p>
+<p class="font-body-md text-body-md text-on-surface-variant">Daily summary of your AI-optimized agenda</p>
+</div>
+</div>
+<div class="flex items-center gap-2 border border-outline-variant/30 px-3 py-1.5 rounded-lg bg-surface-container-low">
+<input class="bg-transparent border-none p-0 text-on-surface font-label-sm text-label-sm focus:ring-0" type="time" value="08:30"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Visual Preferences & Meta -->
+<div class="lg:col-span-4 space-y-xl">
+<div>
+<div class="mb-md flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">Appearance</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl settings-card p-md space-y-md">
+<div class="aspect-video w-full rounded-lg bg-[#F1F1F1] border border-outline-variant/20 flex flex-col items-center justify-center gap-2 relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-t from-white/40 to-transparent"></div>
+<span class="material-symbols-outlined text-primary text-4xl">light_mode</span>
+<p class="font-label-sm text-label-sm text-primary uppercase">Light Mode Active</p>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<button class="p-4 rounded-lg bg-primary text-on-primary flex flex-col items-center gap-2">
+<span class="material-symbols-outlined">light_mode</span>
+<span class="text-[10px] font-label-sm">Light</span>
+</button>
+<button class="p-4 rounded-lg border border-outline-variant/30 hover:bg-surface-container transition-colors flex flex-col items-center gap-2">
+<span class="material-symbols-outlined text-outline">dark_mode</span>
+<span class="text-[10px] font-label-sm text-outline">Dark</span>
+</button>
+</div>
+</div>
+</div>
+<div class="p-lg bg-secondary-container/10 border border-secondary/10 rounded-xl">
+<p class="font-label-sm text-label-sm text-secondary uppercase mb-2">Usage Insights</p>
+<div class="flex items-baseline gap-1">
+<span class="text-3xl font-headline-lg text-primary tracking-tight">42</span>
+<span class="font-body-md text-on-surface-variant">Hours saved this week</span>
+</div>
+<div class="mt-4 h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-3/4 rounded-full"></div>
+</div>
+<p class="mt-2 font-body-md text-on-surface-variant text-[12px]">75% efficiency increase via AI optimization</p>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-6 left-0 right-0 z-50 flex justify-around items-center px-4 py-3 bg-surface-container-lowest/70 backdrop-blur-xl border border-outline-variant/20 shadow-xl fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-md rounded-full">
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-high rounded-full active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+</a>
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-high rounded-full active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+</a>
+<a class="flex items-center justify-center bg-secondary-container text-on-secondary-container rounded-full w-12 h-12 active:scale-90 transition-transform shadow-md" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</a>
+</nav>
+<script>
+        function setAggressiveness(mode) {
+            const btnCons = document.getElementById('btn-conservative');
+            const btnAgg = document.getElementById('btn-aggressive');
+            
+            if (mode === 'conservative') {
+                btnCons.className = 'px-4 py-1.5 rounded-full font-label-sm text-label-sm transition-all bg-surface-container-lowest text-on-surface shadow-sm';
+                btnAgg.className = 'px-4 py-1.5 rounded-full font-label-sm text-label-sm transition-all text-on-surface-variant hover:text-on-surface';
+            } else {
+                btnAgg.className = 'px-4 py-1.5 rounded-full font-label-sm text-label-sm transition-all bg-surface-container-lowest text-on-surface shadow-sm';
+                btnCons.className = 'px-4 py-1.5 rounded-full font-label-sm text-label-sm transition-all text-on-surface-variant hover:text-on-surface';
+            }
+        }
+    </script>
+</body></html>
