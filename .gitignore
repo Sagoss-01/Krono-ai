@@ -28,3 +28,4 @@ front/dist/
 # --- Archives de sauvegarde (volumineuses) ---
 *.zip
 webmail-main/version/
+webmail-main/
