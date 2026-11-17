@@ -1,9 +1,0 @@
-node_modules/
-.env
-logs/
-*.log
-.DS_Store
-public/css/style.css
-data/
-public/uploads/chat
-prompt
